@@ -3,6 +3,10 @@
 @tailwind utilities;
 
 @layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+
   body {
     @apply bg-cream-50 text-slate-900 font-sans antialiased;
   }
@@ -23,5 +27,16 @@
 
   .btn-secondary {
     @apply inline-flex items-center justify-center gap-2 rounded-xl bg-white border border-slate-200 px-5 py-3 text-sm font-semibold text-slate-800 shadow-sm transition-all duration-200 hover:bg-cream-100 hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-brand-700 focus:ring-offset-2 active:scale-[0.99];
+  }
+
+  .bg-subtle-dots {
+    background-image: radial-gradient(rgba(22, 101, 52, 0.11) 1px, transparent 1px);
+    background-size: 22px 22px;
+  }
+
+  .bg-subtle-grid {
+    background-image: linear-gradient(to right, rgba(22, 101, 52, 0.06) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(22, 101, 52, 0.06) 1px, transparent 1px);
+    background-size: 36px 36px;
   }
 }
