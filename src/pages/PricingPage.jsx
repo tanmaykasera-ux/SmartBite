@@ -49,9 +49,19 @@ export default function PricingPage() {
                 </p>
               </div>
             </div>
-            <Button variant="primary" size="sm" to="/register">
-              Free Student Sign Up
-            </Button>
+            <div className="flex flex-wrap items-center gap-2.5">
+              <Button variant="primary" size="sm" to="/login" icon={ArrowRight}>
+                Login to SmartBite
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                to="/register"
+                className="border-brand-700/60 text-brand-900 hover:bg-brand-50"
+              >
+                Free Student Sign Up
+              </Button>
+            </div>
           </RevealOnScroll>
 
           {/* Billing Cycle Toggle */}

@@ -131,25 +131,13 @@ export default function RequestDemoPage() {
               </p>
             </Card>
 
-            <div className="space-y-3 text-xs text-slate-700">
-              <div className="flex items-center gap-2.5">
-                <CheckCircle2 className="w-4 h-4 text-brand-700 shrink-0" />
-                <span>
-                  Custom demand calibration for your institution&apos;s cyclic menu
-                </span>
-              </div>
-              <div className="flex items-center gap-2.5">
-                <CheckCircle2 className="w-4 h-4 text-brand-700 shrink-0" />
-                <span>
-                  Free join-code onboarding for 100% of your hostel students
-                </span>
-              </div>
-              <div className="flex items-center gap-2.5">
-                <ShieldCheck className="w-4 h-4 text-brand-700 shrink-0" />
-                <span>
-                  Guaranteed non-restrictive student meal entitlement workflow
-                </span>
-              </div>
+            <div className="p-3.5 rounded-2xl bg-white border border-brand-200 flex flex-wrap items-center justify-between gap-3 shadow-xs">
+              <span className="text-xs text-slate-700">
+                Already have a Student or Mess Owner account?
+              </span>
+              <Button variant="primary" size="sm" to="/login" icon={ArrowRight}>
+                Login to SmartBite
+              </Button>
             </div>
           </RevealOnScroll>
 

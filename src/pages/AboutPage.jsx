@@ -236,8 +236,16 @@ export default function AboutPage() {
             <Button
               variant="primary"
               size="lg"
-              to="/request-demo"
+              to="/login"
               icon={ArrowRight}
+            >
+              Login to SmartBite
+            </Button>
+            <Button
+              variant="secondary"
+              size="lg"
+              to="/request-demo"
+              className="border-brand-700/60 text-brand-900 hover:bg-brand-50"
             >
               Request a Demo
             </Button>

@@ -141,21 +141,31 @@ export default function ContactPage() {
               </div>
             </Card>
 
-            <Card className="flex items-center justify-between bg-gradient-to-r from-white to-brand-50/50">
+            <Card className="flex flex-wrap items-center justify-between gap-3 bg-gradient-to-r from-white to-brand-50/50">
               <div className="flex items-center gap-3">
-                <Building2 className="w-5 h-5 text-brand-700" />
+                <Building2 className="w-5 h-5 text-brand-700 shrink-0" />
                 <div>
                   <p className="text-xs font-bold text-slate-900">
-                    Looking for a Live Product Walkthrough?
+                    Existing Student or Mess Owner?
                   </p>
                   <p className="text-[11px] text-slate-500">
-                    Explore our interactive mess savings estimator
+                    Sign in to access your daily menus or kitchen dashboard
                   </p>
                 </div>
               </div>
-              <Button variant="soft" size="sm" to="/request-demo">
-                Book Demo
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button variant="primary" size="sm" to="/login">
+                  Login
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  to="/request-demo"
+                  className="border-brand-700/60 text-brand-800 hover:bg-brand-50"
+                >
+                  Book Demo
+                </Button>
+              </div>
             </Card>
           </RevealOnScroll>
 

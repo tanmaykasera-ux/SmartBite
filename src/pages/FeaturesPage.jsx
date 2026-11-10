@@ -127,13 +127,31 @@ export default function FeaturesPage() {
               <p className="text-base sm:text-lg text-slate-600 leading-relaxed max-w-2xl">
                 Built specifically for college messes, hostels, and campus cafeterias where mess operators subscribe for operational intelligence and students enjoy free nutrition and meal preference tools.
               </p>
-              <div className="flex flex-wrap gap-3 pt-2">
-                <Button variant="primary" size="lg" to="/request-demo" icon={ArrowRight}>
-                  Request a Demo
-                </Button>
-                <Button variant="secondary" size="lg" to="/mess-owner-dashboard">
-                  Open Dashboard Preview
-                </Button>
+              <div className="space-y-3 pt-2">
+                <div className="flex flex-wrap gap-3">
+                  <Button variant="primary" size="lg" to="/login" icon={ArrowRight}>
+                    Login to SmartBite
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    size="lg"
+                    to="/mess-owner-dashboard"
+                    className="border-brand-700/60 text-brand-900 hover:bg-brand-50"
+                  >
+                    Open Dashboard Preview
+                  </Button>
+                </div>
+                <p className="text-xs text-slate-600">
+                  Evaluating SmartBite for your campus?{' '}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    to="/request-demo"
+                    className="px-1.5 py-0.5 text-brand-800 font-bold underline"
+                  >
+                    Request a Demo →
+                  </Button>
+                </p>
               </div>
             </RevealOnScroll>
 
@@ -274,13 +292,25 @@ export default function FeaturesPage() {
             <Button
               variant="primary"
               size="lg"
-              to="/workspace-preview"
+              to="/login"
               icon={ArrowRight}
             >
-              Open Interactive Workspace Preview
+              Login to SmartBite
             </Button>
-            <Button variant="secondary" size="lg" to="/request-demo">
+            <Button
+              variant="secondary"
+              size="lg"
+              to="/request-demo"
+              className="border-brand-700/60 text-brand-900 hover:bg-brand-50"
+            >
               Schedule Live Demo
+            </Button>
+            <Button
+              variant="secondary"
+              size="lg"
+              to="/workspace-preview"
+            >
+              Interactive Workspace Preview
             </Button>
           </div>
         </div>

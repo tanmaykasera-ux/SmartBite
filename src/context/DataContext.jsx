@@ -102,6 +102,7 @@ export function DataProvider({ children }) {
   const [loadingData, setLoadingData] = useState(false);
   const [dataError, setDataError] = useState('');
   const [studentsQueryError, setStudentsQueryError] = useState('');
+  const [selectionsQueryError, setSelectionsQueryError] = useState('');
 
   // Shared Mess & Operational State (Empty by default when Supabase is connected; sample data ONLY in Demo Mode)
   const [messProfile, setMessProfile] = useState(() =>
@@ -357,6 +358,7 @@ export function DataProvider({ children }) {
     setLoadingData(true);
     setDataError('');
     setStudentsQueryError('');
+    setSelectionsQueryError('');
     try {
       const messId = user.messId;
 
@@ -443,6 +445,14 @@ export function DataProvider({ children }) {
           rowCount: Array.isArray(stuRes.data) ? stuRes.data.length : 0,
         });
 
+        console.log('[SmartBite][MealSelectionsQuery] Raw Supabase response:', {
+          query: `SELECT *, selection_items(*) FROM public.meal_selections WHERE mess_id = '${messId}'`,
+          messId,
+          data: selRes.data,
+          error: selRes.error,
+          rowCount: Array.isArray(selRes.data) ? selRes.data.length : 0,
+        });
+
         // Only students whose mess_id matches this mess
         const realStudents = (stuRes.data || []).filter(
           (s) => s.mess_id === messId
@@ -450,10 +460,29 @@ export function DataProvider({ children }) {
         const realStudentProfileIds = new Set(
           realStudents.map((s) => s.profile_id).filter(Boolean)
         );
-        const realSelections = (selRes.data || []).filter(
-          (sel) => sel.mess_id === messId
-        );
-        setMealSelectionsRows(realSelections);
+        const studentByProfileId = {};
+        realStudents.forEach((s) => {
+          if (s.profile_id) studentByProfileId[s.profile_id] = s;
+          if (s.id) studentByProfileId[s.id] = s;
+        });
+
+        // Deduplicate meal_selections by id (or menu_id + student_id) and scope strictly to messId
+        const seenSelectionKeys = new Set();
+        const realSelections = (selRes.data || []).filter((sel) => {
+          if (!sel || sel.mess_id !== messId) return false;
+          const dedupKey = sel.id || `${sel.menu_id}_${sel.student_id}`;
+          if (seenSelectionKeys.has(dedupKey)) return false;
+          seenSelectionKeys.add(dedupKey);
+          return true;
+        });
+
+        if (selRes.error) {
+          const selErrMsg = `Failed to load student meal selections from public.meal_selections (mess_id=${messId}): ${
+            selRes.error.message || JSON.stringify(selRes.error)
+          }${selRes.error.code ? ` [Code: ${selRes.error.code}]` : ''}.`;
+          console.error('[SmartBite][MealSelectionsQuery] Query failed:', selErrMsg, selRes.error);
+          setSelectionsQueryError(selErrMsg);
+        }
 
         if (stuRes.error) {
           const errMsg = `Failed to load registered students from public.students (mess_id=${messId}): ${
@@ -477,12 +506,20 @@ export function DataProvider({ children }) {
 
         // Count real dish selections per menu_item_id and student meal selection flags
         const dishSelectionCounts = {};
-        const studentMealFlags = {}; // student_id -> { breakfast: bool, lunch: bool, dinner: bool }
+        const studentMealFlags = {}; // student_id -> { breakfast_selected, lunch_selected, dinner_selected, breakfast_dishes, lunch_dishes, dinner_dishes }
         const menuMealTypeById = {};
+        const menuById = {};
+        const menuItemById = {};
 
         (menusRes.data || []).forEach((m) => {
+          menuById[m.id] = m;
           menuMealTypeById[m.id] = String(m.meal_type || '').toLowerCase();
+          (m.menu_items || []).forEach((mi) => {
+            menuItemById[mi.id] = mi;
+          });
         });
+
+        const enrichedSelections = [];
 
         realSelections.forEach((sel) => {
           // Only count selections from students belonging to this mess (or current student)
@@ -493,22 +530,67 @@ export function DataProvider({ children }) {
           ) {
             return;
           }
-          if (sel.will_attend) {
-            const mType = menuMealTypeById[sel.menu_id];
-            if (mType && sel.student_id) {
-              if (!studentMealFlags[sel.student_id]) {
-                studentMealFlags[sel.student_id] = {};
-              }
-              studentMealFlags[sel.student_id][`${mType}_selected`] = true;
+          const mObj = menuById[sel.menu_id];
+          const mType = menuMealTypeById[sel.menu_id] || '';
+          const matchedStu = studentByProfileId[sel.student_id];
+
+          // Deduplicate selection_items by menu_item_id
+          const seenItemIds = new Set();
+          const selectedDishesList = [];
+
+          (sel.selection_items || []).forEach((si) => {
+            if (!si || !si.selected || !si.menu_item_id) return;
+            if (seenItemIds.has(si.menu_item_id)) return;
+            seenItemIds.add(si.menu_item_id);
+
+            if (sel.will_attend) {
+              dishSelectionCounts[si.menu_item_id] =
+                (dishSelectionCounts[si.menu_item_id] || 0) + 1;
             }
-            (sel.selection_items || []).forEach((si) => {
-              if (si.selected && si.menu_item_id) {
-                dishSelectionCounts[si.menu_item_id] =
-                  (dishSelectionCounts[si.menu_item_id] || 0) + 1;
-              }
+
+            const dishMeta = menuItemById[si.menu_item_id];
+            selectedDishesList.push({
+              id: si.menu_item_id,
+              name: dishMeta?.name || dishMeta?.dish_name || 'Selected Dish',
+              serving_size: dishMeta?.serving_size || '',
+              calories: Number(dishMeta?.calories || 0),
+              protein: Number(dishMeta?.protein || 0),
             });
+          });
+
+          if (sel.will_attend && mType && sel.student_id) {
+            if (!studentMealFlags[sel.student_id]) {
+              studentMealFlags[sel.student_id] = {
+                breakfast_dishes: [],
+                lunch_dishes: [],
+                dinner_dishes: [],
+              };
+            }
+            studentMealFlags[sel.student_id][`${mType}_selected`] = true;
+            const dishNames = selectedDishesList.map((d) => d.name);
+            if (dishNames.length > 0 && Array.isArray(studentMealFlags[sel.student_id][`${mType}_dishes`])) {
+              const existingNames = new Set(studentMealFlags[sel.student_id][`${mType}_dishes`]);
+              dishNames.forEach((n) => existingNames.add(n));
+              studentMealFlags[sel.student_id][`${mType}_dishes`] = Array.from(existingNames);
+            }
           }
+
+          enrichedSelections.push({
+            ...sel,
+            student_name: matchedStu?.full_name || 'Registered Student',
+            student_roll_id: matchedStu?.student_roll_id || 'N/A',
+            hostel_name: matchedStu?.hostel_name || 'N/A',
+            menu_date:
+              mObj?.menu_date ||
+              (sel.submitted_at ? String(sel.submitted_at).split('T')[0] : ''),
+            meal_type: mType || 'lunch',
+            menu_title: mObj?.title || '',
+            selected_dishes: selectedDishesList,
+            selected_dishes_count: selectedDishesList.length,
+          });
         });
+
+        setMealSelectionsRows(enrichedSelections);
 
         const enrichedStudents = realStudents.map((s) => ({
           ...s,
@@ -521,6 +603,10 @@ export function DataProvider({ children }) {
           dinner_selected: Boolean(
             studentMealFlags[s.profile_id]?.dinner_selected
           ),
+          breakfast_dishes:
+            studentMealFlags[s.profile_id]?.breakfast_dishes || [],
+          lunch_dishes: studentMealFlags[s.profile_id]?.lunch_dishes || [],
+          dinner_dishes: studentMealFlags[s.profile_id]?.dinner_dishes || [],
         }));
         setStudents(enrichedStudents);
 
@@ -2058,6 +2144,7 @@ export function DataProvider({ children }) {
         loadingData,
         dataError,
         studentsQueryError,
+        selectionsQueryError,
         messProfile,
         menus,
         students,
