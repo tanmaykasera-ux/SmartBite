@@ -38,6 +38,11 @@ import {
   generateSmartRecommendations,
   computeMessNutritionAnalytics,
 } from '../lib/analyticsEngine';
+import {
+  getTodayDateStr,
+  normalizeDateStr,
+  formatHumanDate,
+} from '../lib/dateUtils';
 
 const DataContext = createContext(null);
 
@@ -581,8 +586,8 @@ export function DataProvider({ children }) {
             student_roll_id: matchedStu?.student_roll_id || 'N/A',
             hostel_name: matchedStu?.hostel_name || 'N/A',
             menu_date:
-              mObj?.menu_date ||
-              (sel.submitted_at ? String(sel.submitted_at).split('T')[0] : ''),
+              normalizeDateStr(mObj?.menu_date) ||
+              (sel.submitted_at ? normalizeDateStr(sel.submitted_at) : ''),
             meal_type: mType || 'lunch',
             menu_title: mObj?.title || '',
             selected_dishes: selectedDishesList,
@@ -671,6 +676,7 @@ export function DataProvider({ children }) {
 
         const mappedMenus = rawMenus.map((m) => ({
           ...m,
+          menu_date: normalizeDateStr(m.menu_date) || m.menu_date,
           meal_type: String(m.meal_type || 'lunch').toLowerCase(),
           items: (m.menu_items || []).map((item) => ({
             ...item,
@@ -795,8 +801,10 @@ export function DataProvider({ children }) {
           const nextHist = [];
 
           ownSelections.forEach((sel) => {
-            const menuObj = mappedMenus.find((m) => m.id === sel.menu_id);
-            const mDate = menuObj?.menu_date || '';
+            const menuObj =
+              mappedMenus.find((m) => m.id === sel.menu_id) ||
+              menuById[sel.menu_id];
+            const mDate = normalizeDateStr(menuObj?.menu_date);
             const mTypeLower = String(menuObj?.meal_type || 'lunch').toLowerCase();
             const mTypeCap =
               mTypeLower.charAt(0).toUpperCase() + mTypeLower.slice(1);
@@ -1154,17 +1162,23 @@ export function DataProvider({ children }) {
     const normalizedMealType = String(
       menuPayload.meal_type || 'lunch'
     ).toLowerCase();
+    const targetMenuDate =
+      normalizeDateStr(menuPayload.menu_date) || getTodayDateStr();
+
+    // Match strictly by (menu_date, meal_type) so a menu for one date never overwrites another date's menu
     const existingIndex = menus.findIndex(
       (m) =>
-        m.id === menuPayload.id ||
-        (m.menu_date === menuPayload.menu_date &&
-          String(m.meal_type).toLowerCase() === normalizedMealType)
+        normalizeDateStr(m.menu_date) === targetMenuDate &&
+        String(m.meal_type || '').toLowerCase() === normalizedMealType
     );
 
     let recordId =
       existingIndex >= 0
         ? menus[existingIndex].id
-        : menuPayload.id || `menu-${normalizedMealType}-${Date.now()}`;
+        : menuPayload.id &&
+          !String(menuPayload.id).startsWith('menu-')
+        ? menuPayload.id
+        : `menu-${normalizedMealType}-${targetMenuDate}`;
 
     const currentItems =
       menuPayload.items ||
@@ -1194,7 +1208,7 @@ export function DataProvider({ children }) {
           [
             {
               mess_id: user.messId,
-              menu_date: menuPayload.menu_date,
+              menu_date: targetMenuDate,
               meal_type: normalizedMealType,
               title: menuPayload.title,
               publish_status: menuPayload.publish_status || 'draft',
@@ -1220,26 +1234,33 @@ export function DataProvider({ children }) {
       ...(existingIndex >= 0 ? menus[existingIndex] : {}),
       ...menuPayload,
       id: recordId,
+      menu_date: targetMenuDate,
       meal_type: normalizedMealType,
       items: currentItems,
     };
 
-    if (existingIndex >= 0) {
-      setMenus((prev) =>
-        prev.map((m, idx) => (idx === existingIndex ? updatedMenu : m))
+    setMenus((prev) => {
+      const idx = prev.findIndex(
+        (m) =>
+          normalizeDateStr(m.menu_date) === targetMenuDate &&
+          String(m.meal_type || '').toLowerCase() === normalizedMealType
       );
-    } else {
-      setMenus((prev) => [updatedMenu, ...prev]);
-    }
+      if (idx >= 0) {
+        return prev.map((m, i) => (i === idx ? updatedMenu : m));
+      }
+      return [updatedMenu, ...prev];
+    });
 
     if (menuPayload.publish_status === 'published') {
       await addNotification({
-        title: `New Menu Published: ${normalizedMealType.toUpperCase()} (${
-          menuPayload.menu_date
-        })`,
+        title: `New Menu Published: ${normalizedMealType.toUpperCase()} (${formatHumanDate(
+          targetMenuDate
+        )})`,
         message: `${
           updatedMenu.title || 'Daily Menu'
-        } is now live! Select your preferred dishes before the deadline. Your meal entitlement remains 100% guaranteed even if you do not submit a selection.`,
+        } for ${formatHumanDate(
+          targetMenuDate
+        )} (${targetMenuDate}) is now live! Select your preferred dishes before the deadline. Your meal entitlement remains 100% guaranteed even if you do not submit a selection.`,
         notification_type: 'menu_published',
         recipient_role: 'student',
       });
@@ -1347,7 +1368,7 @@ export function DataProvider({ children }) {
     selectedDishIds = [],
   }) => {
     const resolvedDate =
-      menuDate || meal_date || new Date().toISOString().split('T')[0];
+      normalizeDateStr(menuDate || meal_date) || getTodayDateStr();
     const rawMealType = mealType || meal_type || 'Lunch';
     const normalizedMealLower = String(rawMealType).toLowerCase();
     const normalizedMealCap =
@@ -1356,18 +1377,21 @@ export function DataProvider({ children }) {
     const attending =
       will_attend !== undefined ? Boolean(will_attend) : Boolean(willAttend);
 
+    // Match strictly by exact menu_date AND meal_type (never fall back to a menu from another date)
     const targetMenu =
-      menus.find((m) => m.id === menuId) ||
       menus.find(
         (m) =>
-          m.menu_date === resolvedDate &&
-          String(m.meal_type).toLowerCase() === normalizedMealLower
+          m.id === menuId &&
+          normalizeDateStr(m.menu_date) === resolvedDate
       ) ||
       menus.find(
-        (m) => String(m.meal_type).toLowerCase() === normalizedMealLower
-      );
+        (m) =>
+          normalizeDateStr(m.menu_date) === resolvedDate &&
+          String(m.meal_type || '').toLowerCase() === normalizedMealLower
+      ) ||
+      null;
 
-    // Enforce: Students can only submit selections on published menus from their own mess
+    // Enforce: Students can only submit selections on published menus from their own mess for the exact date
     if (!isDemoMode) {
       if (!user?.messId) {
         throw new Error(
@@ -1376,7 +1400,9 @@ export function DataProvider({ children }) {
       }
       if (!targetMenu) {
         throw new Error(
-          `No published ${normalizedMealCap} menu is available for selection yet.`
+          `No published ${normalizedMealCap} menu is available for ${formatHumanDate(
+            resolvedDate
+          )} yet.`
         );
       }
       if (

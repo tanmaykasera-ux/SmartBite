@@ -44,6 +44,54 @@ import Button from '../components/common/Button';
 import { useAuth } from '../context/AuthContext';
 import { useData } from '../context/DataContext';
 import { supabase } from '../lib/supabase';
+import {
+  getTodayDateStr,
+  getTomorrowDateStr,
+  normalizeDateStr,
+  formatHumanDate,
+} from '../lib/dateUtils';
+
+function buildDateSpecificMenusMap(menus, targetDate, isDemoMode, messId) {
+  const map = { Breakfast: null, Lunch: null, Dinner: null };
+  if (!isDemoMode && !messId) {
+    return map;
+  }
+  const normalizedTargetDate = normalizeDateStr(targetDate);
+  if (!normalizedTargetDate) {
+    return map;
+  }
+
+  // Strictly published menus belonging to the student's enrolled mess for the exact targetDate
+  const publishedMenusForDate = (menus || []).filter((m) => {
+    const isPublished =
+      String(m.publish_status || '').toLowerCase() === 'published';
+    const matchesMess =
+      isDemoMode || Boolean(messId && m.mess_id === messId);
+    const matchesDate =
+      normalizeDateStr(m.menu_date) === normalizedTargetDate;
+    return isPublished && matchesMess && matchesDate;
+  });
+
+  ['Breakfast', 'Lunch', 'Dinner'].forEach((type) => {
+    const lowerType = type.toLowerCase();
+    const exactMatch = publishedMenusForDate.find(
+      (m) => String(m.meal_type || '').toLowerCase() === lowerType
+    );
+    if (exactMatch) {
+      map[type] = {
+        ...exactMatch,
+        menu_date: normalizedTargetDate,
+        items: (exactMatch.items || []).map((dish) => ({
+          ...dish,
+          dish_name: dish.dish_name || dish.name || 'Dish',
+          name: dish.name || dish.dish_name || 'Dish',
+        })),
+      };
+    }
+  });
+
+  return map;
+}
 
 const SIDEBAR_ITEMS = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -183,9 +231,9 @@ export default function StudentDashboardPage() {
   const [menuMealFilter, setMenuMealFilter] = useState('All');
   const [menuSearch, setMenuSearch] = useState('');
 
-  // Meal Selection state
-  const todayStr = new Date().toISOString().split('T')[0];
-  const tomorrowStr = new Date(Date.now() + 86400000).toISOString().split('T')[0];
+  // Meal Selection state (strictly India Standard Time calendar dates YYYY-MM-DD)
+  const todayStr = getTodayDateStr();
+  const tomorrowStr = getTomorrowDateStr();
   const [selectedDate, setSelectedDate] = useState(todayStr);
   const [selectionDraft, setSelectionDraft] = useState({});
   const [selectionSavedToast, setSelectionSavedToast] = useState('');
@@ -208,47 +256,24 @@ export default function StudentDashboardPage() {
   const studentDisplayName =
     studentProfile?.full_name || user?.full_name || user?.email?.split('@')[0] || 'Student';
 
-  // Organize menus by meal_type (strictly published menus belonging to the student's mess)
-  const menusByMealType = useMemo(() => {
-    const map = { Breakfast: null, Lunch: null, Dinner: null };
-    if (!isDemoMode && !user?.messId) {
-      return map;
-    }
-    const publishedMenus = (menus || []).filter(
-      (m) =>
-        String(m.publish_status || 'published').toLowerCase() === 'published' &&
-        (!user?.messId || !m.mess_id || m.mess_id === user.messId)
-    );
-    ['Breakfast', 'Lunch', 'Dinner'].forEach((type) => {
-      const lowerType = type.toLowerCase();
-      const exactMatch = publishedMenus.find(
-        (m) =>
-          String(m.meal_type || '').toLowerCase() === lowerType &&
-          m.menu_date === selectedDate
-      );
-      const fallbackMatch = publishedMenus.find(
-        (m) => String(m.meal_type || '').toLowerCase() === lowerType
-      );
-      const chosen = exactMatch || fallbackMatch || null;
-      if (chosen) {
-        map[type] = {
-          ...chosen,
-          items: (chosen.items || []).map((dish) => ({
-            ...dish,
-            dish_name: dish.dish_name || dish.name || 'Dish',
-            name: dish.name || dish.dish_name || 'Dish',
-          })),
-        };
-      }
-    });
-    return map;
-  }, [menus, selectedDate, isDemoMode, user?.messId]);
+  // Organize menus strictly for the currently selected date (Meal Selection & Nutrition Tracker)
+  // Never reuses another date's menu as a fallback when no menu is published for selectedDate
+  const menusByMealType = useMemo(
+    () => buildDateSpecificMenusMap(menus, selectedDate, isDemoMode, user?.messId),
+    [menus, selectedDate, isDemoMode, user?.messId]
+  );
 
-  // All dishes across today's Breakfast, Lunch, Dinner
+  // Organize menus strictly for Today (Dashboard Overview & Today's Menu tab)
+  const todayMenusByMealType = useMemo(
+    () => buildDateSpecificMenusMap(menus, todayStr, isDemoMode, user?.messId),
+    [menus, todayStr, isDemoMode, user?.messId]
+  );
+
+  // All dishes across today's Breakfast, Lunch, Dinner (strictly todayStr)
   const allTodayDishes = useMemo(() => {
     const list = [];
     ['Breakfast', 'Lunch', 'Dinner'].forEach((type) => {
-      const menu = menusByMealType[type];
+      const menu = todayMenusByMealType[type];
       if (menu && Array.isArray(menu.items)) {
         menu.items.forEach((dish) => {
           list.push({
@@ -262,37 +287,71 @@ export default function StudentDashboardPage() {
       }
     });
     return list;
-  }, [menusByMealType]);
+  }, [todayMenusByMealType]);
 
-  // Helper to get active selected dish IDs for a meal type
-  const getSelectedDishIdsForMeal = (mealType) => {
-    const key = `${selectedDate}_${mealType}`;
+  // Helper to get active selected dish IDs for a meal type on a specific date
+  // Never falls back to another date's selections
+  const getSelectedDishIdsForMeal = (mealType, targetDate = selectedDate) => {
+    const normDate = normalizeDateStr(targetDate) || todayStr;
+    const key = `${normDate}_${mealType}`;
+    const lowerKey = `${normDate}_${String(mealType).toLowerCase()}`;
+    const menuForDate =
+      normDate === todayStr
+        ? todayMenusByMealType[mealType]
+        : normDate === selectedDate
+        ? menusByMealType[mealType]
+        : buildDateSpecificMenusMap(menus, normDate, isDemoMode, user?.messId)[
+            mealType
+          ];
+    const validDishIds = new Set(
+      (menuForDate?.items || []).map((item) => item.id)
+    );
+
     if (selectionDraft[key] !== undefined) {
-      return selectionDraft[key].selectedDishIds;
+      const draftIds = Array.isArray(selectionDraft[key].selectedDishIds)
+        ? selectionDraft[key].selectedDishIds
+        : [];
+      return validDishIds.size > 0
+        ? draftIds.filter((id) => validDishIds.has(id))
+        : [];
     }
-    const saved = studentSelectionsMap[key] || studentSelectionsMap[`${todayStr}_${mealType}`];
+
+    const saved =
+      studentSelectionsMap[key] ||
+      studentSelectionsMap[lowerKey] ||
+      (menuForDate?.id &&
+      normalizeDateStr(studentSelectionsMap[menuForDate.id]?.menu_date) ===
+        normDate
+        ? studentSelectionsMap[menuForDate.id]
+        : null);
+
     if (saved && Array.isArray(saved.selectedDishIds)) {
-      return saved.selectedDishIds;
+      return validDishIds.size > 0
+        ? saved.selectedDishIds.filter((id) => validDishIds.has(id))
+        : [];
     }
     return [];
   };
 
-  const getAttendingStatusForMeal = (mealType) => {
-    const key = `${selectedDate}_${mealType}`;
+  const getAttendingStatusForMeal = (mealType, targetDate = selectedDate) => {
+    const normDate = normalizeDateStr(targetDate) || todayStr;
+    const key = `${normDate}_${mealType}`;
+    const lowerKey = `${normDate}_${String(mealType).toLowerCase()}`;
     if (selectionDraft[key] !== undefined) {
       return selectionDraft[key].will_attend;
     }
-    const saved = studentSelectionsMap[key] || studentSelectionsMap[`${todayStr}_${mealType}`];
+    const saved = studentSelectionsMap[key] || studentSelectionsMap[lowerKey];
     if (saved && typeof saved.will_attend === 'boolean') {
       return saved.will_attend;
     }
     return true;
   };
 
-  const toggleDishSelection = (mealType, dishId) => {
-    const key = `${selectedDate}_${mealType}`;
-    const currentIds = getSelectedDishIdsForMeal(mealType);
-    const currentAttend = getAttendingStatusForMeal(mealType);
+  const toggleDishSelection = (mealType, dishId, targetDate = selectedDate) => {
+    const normDate = normalizeDateStr(targetDate) || todayStr;
+    const key = `${normDate}_${mealType}`;
+    const currentIds = getSelectedDishIdsForMeal(mealType, normDate);
+    const currentAttend = getAttendingStatusForMeal(mealType, normDate);
     const exists = currentIds.includes(dishId);
     const nextIds = exists
       ? currentIds.filter((id) => id !== dishId)
@@ -310,11 +369,13 @@ export default function StudentDashboardPage() {
   const handleSaveMealSelection = async (mealType) => {
     setSubmittingMeal(mealType);
     setSelectionSavedToast('');
-    const dishIds = getSelectedDishIdsForMeal(mealType);
-    const willAttend = getAttendingStatusForMeal(mealType);
+    const targetMenu = menusByMealType[mealType];
+    const dishIds = getSelectedDishIdsForMeal(mealType, selectedDate);
+    const willAttend = getAttendingStatusForMeal(mealType, selectedDate);
 
     try {
       await submitStudentMealSelection({
+        menuId: targetMenu?.id,
         meal_date: selectedDate,
         meal_type: mealType,
         will_attend: willAttend,
@@ -324,7 +385,7 @@ export default function StudentDashboardPage() {
       setSelectionSavedToast(
         `Your ${mealType} preference (${dishIds.length} dish${
           dishIds.length === 1 ? '' : 'es'
-        }) for ${selectedDate} has been confirmed and shared with ${
+        }) for ${formatHumanDate(selectedDate)} (${selectedDate}) has been confirmed and shared with ${
           messProfile?.mess_name || 'the mess kitchen'
         }!`
       );
@@ -335,7 +396,7 @@ export default function StudentDashboardPage() {
     }
   };
 
-  // Automatic Nutrition Calculation from Selected Dishes across Breakfast, Lunch, Dinner
+  // Automatic Nutrition Calculation for Selected Date (used in Meal Selection & Nutrition Tracker)
   const nutritionSummary = useMemo(() => {
     const byMeal = {
       Breakfast: { calories: 0, protein: 0, carbs: 0, fats: 0, dishes: [] },
@@ -345,7 +406,7 @@ export default function StudentDashboardPage() {
 
     ['Breakfast', 'Lunch', 'Dinner'].forEach((mealType) => {
       const menu = menusByMealType[mealType];
-      const selectedIds = getSelectedDishIdsForMeal(mealType);
+      const selectedIds = getSelectedDishIdsForMeal(mealType, selectedDate);
       if (menu && Array.isArray(menu.items)) {
         menu.items.forEach((dish) => {
           if (selectedIds.includes(dish.id)) {
@@ -398,6 +459,56 @@ export default function StudentDashboardPage() {
 
     return { byMeal, total, mealChartData, macroPieData };
   }, [menusByMealType, studentSelectionsMap, selectionDraft, selectedDate]);
+
+  // Automatic Nutrition Calculation strictly for Today (used on Dashboard Overview KPI & Today cards)
+  const todayNutritionSummary = useMemo(() => {
+    const byMeal = {
+      Breakfast: { calories: 0, protein: 0, carbs: 0, fats: 0, dishes: [] },
+      Lunch: { calories: 0, protein: 0, carbs: 0, fats: 0, dishes: [] },
+      Dinner: { calories: 0, protein: 0, carbs: 0, fats: 0, dishes: [] },
+    };
+
+    ['Breakfast', 'Lunch', 'Dinner'].forEach((mealType) => {
+      const menu = todayMenusByMealType[mealType];
+      const selectedIds = getSelectedDishIdsForMeal(mealType, todayStr);
+      if (menu && Array.isArray(menu.items)) {
+        menu.items.forEach((dish) => {
+          if (selectedIds.includes(dish.id)) {
+            byMeal[mealType].calories += Number(dish.calories || 0);
+            byMeal[mealType].protein += Number(dish.protein || 0);
+            byMeal[mealType].carbs += Number(dish.carbs || 0);
+            byMeal[mealType].fats += Number(dish.fats || 0);
+            byMeal[mealType].dishes.push(dish);
+          }
+        });
+      }
+      byMeal[mealType].protein = Number(byMeal[mealType].protein.toFixed(1));
+      byMeal[mealType].carbs = Number(byMeal[mealType].carbs.toFixed(1));
+      byMeal[mealType].fats = Number(byMeal[mealType].fats.toFixed(1));
+    });
+
+    const total = {
+      calories:
+        byMeal.Breakfast.calories + byMeal.Lunch.calories + byMeal.Dinner.calories,
+      protein: Number(
+        (
+          byMeal.Breakfast.protein +
+          byMeal.Lunch.protein +
+          byMeal.Dinner.protein
+        ).toFixed(1)
+      ),
+      carbs: Number(
+        (byMeal.Breakfast.carbs + byMeal.Lunch.carbs + byMeal.Dinner.carbs).toFixed(
+          1
+        )
+      ),
+      fats: Number(
+        (byMeal.Breakfast.fats + byMeal.Lunch.fats + byMeal.Dinner.fats).toFixed(1)
+      ),
+    };
+
+    return { byMeal, total };
+  }, [todayMenusByMealType, studentSelectionsMap, selectionDraft, todayStr]);
 
   const unreadNotificationsCount = notifications.filter((n) => !n.is_read).length;
 
@@ -656,10 +767,10 @@ export default function StudentDashboardPage() {
                 </div>
               </div>
 
-              {promptError && (
+              {linkError && (
                 <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-xs font-semibold text-red-800 flex items-center gap-2">
                   <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
-                  <span>{promptError}</span>
+                  <span>{linkError}</span>
                 </div>
               )}
 
@@ -683,13 +794,13 @@ export default function StudentDashboardPage() {
                       className="w-full px-3.5 py-2.5 rounded-xl bg-white border border-slate-300 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-700"
                     >
                       <option value="">
-                        {loadingMessList
+                        {loadingMesses
                           ? 'Loading colleges...'
-                          : uniquePromptColleges.length === 0
+                          : promptCollegeOptions.length === 0
                           ? 'No active colleges found — use Join Code'
                           : 'Choose your college...'}
                       </option>
-                      {uniquePromptColleges.map((col) => (
+                      {promptCollegeOptions.map((col) => (
                         <option key={col} value={col}>
                           {col}
                         </option>
@@ -708,13 +819,13 @@ export default function StudentDashboardPage() {
                       className="w-full px-3.5 py-2.5 rounded-xl bg-white border border-slate-300 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-700"
                     >
                       <option value="">
-                        {filteredPromptMesses.length === 0
+                        {promptMessesForCollege.length === 0
                           ? 'No active messes found'
                           : 'Choose your mess...'}
                       </option>
-                      {filteredPromptMesses.map((m) => (
+                      {promptMessesForCollege.map((m) => (
                         <option key={m.id} value={m.id}>
-                          {m.mess_name} ({m.college_name})
+                          {m.name || m.mess_name} ({m.college_name})
                         </option>
                       ))}
                     </select>
@@ -760,12 +871,7 @@ export default function StudentDashboardPage() {
                         Welcome Back, {studentDisplayName}
                       </Badge>
                       <span className="text-xs text-brand-200">
-                        {new Date().toLocaleDateString('en-IN', {
-                          weekday: 'long',
-                          day: 'numeric',
-                          month: 'short',
-                          year: 'numeric',
-                        })}
+                        {formatHumanDate(todayStr)}
                       </span>
                     </div>
                     <h2 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
@@ -786,7 +892,10 @@ export default function StudentDashboardPage() {
                       size="sm"
                       icon={CheckSquare}
                       iconPosition="left"
-                      onClick={() => setActiveTab('selection')}
+                      onClick={() => {
+                        setSelectedDate(todayStr);
+                        setActiveTab('selection');
+                      }}
                     >
                       Select Today&apos;s Meals
                     </Button>
@@ -820,7 +929,7 @@ export default function StudentDashboardPage() {
                     Selected Calories Today
                   </span>
                   <p className="text-2xl font-extrabold text-slate-900">
-                    {nutritionSummary.total.calories}{' '}
+                    {todayNutritionSummary.total.calories}{' '}
                     <span className="text-xs font-semibold text-slate-500">
                       / {studentProfile?.daily_calorie_goal || 2200} kcal
                     </span>
@@ -835,11 +944,11 @@ export default function StudentDashboardPage() {
                     Daily Protein Intake
                   </span>
                   <p className="text-2xl font-extrabold text-brand-800">
-                    {nutritionSummary.total.protein}g
+                    {todayNutritionSummary.total.protein}g
                   </p>
                   <p className="text-[11px] text-slate-500">
-                    Carbs: {nutritionSummary.total.carbs}g • Fats:{' '}
-                    {nutritionSummary.total.fats}g
+                    Carbs: {todayNutritionSummary.total.carbs}g • Fats:{' '}
+                    {todayNutritionSummary.total.fats}g
                   </p>
                 </Card>
 
@@ -850,7 +959,7 @@ export default function StudentDashboardPage() {
                   <p className="text-2xl font-extrabold text-slate-900">
                     {
                       ['Breakfast', 'Lunch', 'Dinner'].filter(
-                        (m) => getSelectedDishIdsForMeal(m).length > 0
+                        (m) => getSelectedDishIdsForMeal(m, todayStr).length > 0
                       ).length
                     }{' '}
                     / 3 Meals
@@ -878,7 +987,7 @@ export default function StudentDashboardPage() {
                 <div className="flex items-center justify-between">
                   <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
                     <UtensilsCrossed className="w-4 h-4 text-brand-700" />
-                    Today&apos;s Breakfast, Lunch &amp; Dinner Schedule
+                    Today&apos;s Breakfast, Lunch &amp; Dinner Schedule ({formatHumanDate(todayStr)})
                   </h3>
                   <button
                     type="button"
@@ -891,9 +1000,9 @@ export default function StudentDashboardPage() {
 
                 <div className="grid md:grid-cols-3 gap-5">
                   {['Breakfast', 'Lunch', 'Dinner'].map((mealType) => {
-                    const menu = menusByMealType[mealType];
-                    const selectedIds = getSelectedDishIdsForMeal(mealType);
-                    const mealNutrition = nutritionSummary.byMeal[mealType];
+                    const menu = todayMenusByMealType[mealType];
+                    const selectedIds = getSelectedDishIdsForMeal(mealType, todayStr);
+                    const mealNutrition = todayNutritionSummary.byMeal[mealType];
 
                     return (
                       <Card key={mealType} className="p-5 flex flex-col justify-between space-y-4">
@@ -914,7 +1023,7 @@ export default function StudentDashboardPage() {
                           <div className="space-y-2">
                             {(menu?.items || []).length === 0 ? (
                               <div className="p-3 rounded-xl bg-cream-50 border border-dashed border-slate-200 text-center text-xs text-slate-500">
-                                No menu items published for {mealType} yet.
+                                No menu published for {mealType} on {formatHumanDate(todayStr)} yet.
                               </div>
                             ) : (
                               (menu?.items || []).map((dish) => {
@@ -958,7 +1067,10 @@ export default function StudentDashboardPage() {
                           </span>
                           <button
                             type="button"
-                            onClick={() => setActiveTab('selection')}
+                            onClick={() => {
+                              setSelectedDate(todayStr);
+                              setActiveTab('selection');
+                            }}
                             className="text-xs font-bold text-brand-800 hover:text-brand-950"
                           >
                             Modify Selection →
@@ -983,8 +1095,8 @@ export default function StudentDashboardPage() {
 
                   <div className="space-y-2.5">
                     {['Breakfast', 'Lunch', 'Dinner'].map((mealType) => {
-                      const menu = menusByMealType[mealType];
-                      const selectedCount = getSelectedDishIdsForMeal(mealType).length;
+                      const menu = todayMenusByMealType[mealType];
+                      const selectedCount = getSelectedDishIdsForMeal(mealType, todayStr).length;
                       return (
                         <div
                           key={mealType}
@@ -1072,7 +1184,7 @@ export default function StudentDashboardPage() {
               <Card className="p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
                   <h2 className="text-lg font-bold text-slate-900">
-                    Today&apos;s Verified Mess Menu &amp; Dish Breakdown
+                    Today&apos;s Verified Mess Menu &amp; Dish Breakdown ({formatHumanDate(todayStr)})
                   </h2>
                   <p className="text-xs text-slate-500">
                     Every dish card displays serving-size-verified calories, macronutrients, and ingredients entered by your mess nutrition team.
@@ -1121,10 +1233,10 @@ export default function StudentDashboardPage() {
               {allTodayDishes.length === 0 ? (
                 <Card className="p-8 text-center bg-cream-50 border-dashed border-slate-200 space-y-3">
                   <p className="text-sm font-bold text-slate-800">
-                    No menus yet. Your mess operator has not published a menu for today.
+                    No menu published for {formatHumanDate(todayStr)} yet.
                   </p>
                   <p className="text-xs text-slate-500 max-w-md mx-auto">
-                    Once your mess kitchen publishes Breakfast, Lunch, or Dinner menus, all dish cards with verified nutrition will appear here.
+                    Once your mess kitchen publishes Breakfast, Lunch, or Dinner menus for today ({todayStr}), all dish cards with verified nutrition will appear here.
                   </p>
                   <div>
                     <Button
@@ -1155,7 +1267,8 @@ export default function StudentDashboardPage() {
                   )
                   .map((dish) => {
                     const isSelected = getSelectedDishIdsForMeal(
-                      dish.meal_type
+                      dish.meal_type,
+                      todayStr
                     ).includes(dish.id);
                     return (
                       <Card
@@ -1255,7 +1368,8 @@ export default function StudentDashboardPage() {
                           <button
                             type="button"
                             onClick={() => {
-                              toggleDishSelection(dish.meal_type, dish.id);
+                              setSelectedDate(todayStr);
+                              toggleDishSelection(dish.meal_type, dish.id, todayStr);
                               setActiveTab('selection');
                             }}
                             className={`w-full py-2.5 px-4 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 ${
@@ -1291,7 +1405,7 @@ export default function StudentDashboardPage() {
                     </span>
                   </div>
                   <h2 className="text-lg font-bold text-slate-900">
-                    Select Your Preferred Dishes (Breakfast, Lunch &amp; Dinner)
+                    Select Your Preferred Dishes for {formatHumanDate(selectedDate)}
                   </h2>
                   <p className="text-xs text-slate-600">
                     Select one or multiple dishes per meal before the cutoff deadline. Your meal entitlement is always preserved even if you do not submit a selection.
@@ -1301,7 +1415,10 @@ export default function StudentDashboardPage() {
                 <div className="flex items-center gap-2 shrink-0">
                   <button
                     type="button"
-                    onClick={() => setSelectedDate(todayStr)}
+                    onClick={() => {
+                      setSelectedDate(todayStr);
+                      setSelectionSavedToast('');
+                    }}
                     className={`px-3.5 py-2 rounded-xl text-xs font-bold border transition-all ${
                       selectedDate === todayStr
                         ? 'bg-brand-800 text-white border-brand-800'
@@ -1312,7 +1429,10 @@ export default function StudentDashboardPage() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => setSelectedDate(tomorrowStr)}
+                    onClick={() => {
+                      setSelectedDate(tomorrowStr);
+                      setSelectionSavedToast('');
+                    }}
                     className={`px-3.5 py-2 rounded-xl text-xs font-bold border transition-all ${
                       selectedDate === tomorrowStr
                         ? 'bg-brand-800 text-white border-brand-800'
@@ -1338,10 +1458,11 @@ export default function StudentDashboardPage() {
               <div className="space-y-6">
                 {['Breakfast', 'Lunch', 'Dinner'].map((mealType) => {
                   const menu = menusByMealType[mealType];
-                  const selectedIds = getSelectedDishIdsForMeal(mealType);
+                  const selectedIds = getSelectedDishIdsForMeal(mealType, selectedDate);
                   const savedRecord =
                     studentSelectionsMap[`${selectedDate}_${mealType}`] ||
-                    studentSelectionsMap[`${todayStr}_${mealType}`];
+                    studentSelectionsMap[`${selectedDate}_${mealType.toLowerCase()}`] ||
+                    null;
                   const mealMacro = nutritionSummary.byMeal[mealType];
 
                   return (
@@ -1360,7 +1481,7 @@ export default function StudentDashboardPage() {
                             </span>
                           </div>
                           <p className="text-xs text-slate-500 mt-1">
-                            Click multiple dishes below to include them in your preferred plate.
+                            Click multiple dishes below to include them in your preferred plate for {formatHumanDate(selectedDate)}.
                           </p>
                         </div>
 
@@ -1381,10 +1502,10 @@ export default function StudentDashboardPage() {
                       {(menu?.items || []).length === 0 ? (
                         <div className="p-6 rounded-xl bg-cream-50 border border-dashed border-slate-200 text-center space-y-2">
                           <p className="text-xs font-semibold text-slate-700">
-                            No menu published for {mealType} on {selectedDate} yet.
+                            No menu published for {mealType} on {formatHumanDate(selectedDate)} yet.
                           </p>
                           <p className="text-[11px] text-slate-500">
-                            Your meal entitlement remains 100% guaranteed. Check back once your mess publishes the {mealType} menu.
+                            Your meal entitlement remains 100% guaranteed. Check back once your mess publishes the {mealType} menu for {formatHumanDate(selectedDate)} ({selectedDate}).
                           </p>
                         </div>
                       ) : (

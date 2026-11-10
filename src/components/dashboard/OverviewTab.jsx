@@ -31,6 +31,11 @@ import Badge from '../common/Badge';
 import Button from '../common/Button';
 import { useData } from '../../context/DataContext';
 import { useAuth } from '../../context/AuthContext';
+import {
+  getTodayDateStr,
+  normalizeDateStr,
+  formatHumanDate,
+} from '../../lib/dateUtils';
 
 export default function OverviewTab({ onNavigateTab }) {
   const { user, isDemoMode } = useAuth();
@@ -48,9 +53,11 @@ export default function OverviewTab({ onNavigateTab }) {
     feedbackList,
   } = useData();
 
-  const todayStr = new Date().toISOString().split('T')[0];
-  const todayMenus = menus.filter((m) => m.menu_date === todayStr);
-  const displayMenus = todayMenus.length > 0 ? todayMenus : menus;
+  const todayStr = getTodayDateStr();
+  const todayMenus = menus.filter(
+    (m) => normalizeDateStr(m.menu_date) === todayStr
+  );
+  const displayMenus = todayMenus;
 
   // Uses shared messStudents & totalRegisteredStudents from DataContext (identical to Student Selections page)
   const totalRegistered = totalRegisteredStudents;
@@ -229,10 +236,10 @@ export default function OverviewTab({ onNavigateTab }) {
           <div>
             <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
               <Utensils className="w-4 h-4 text-brand-700" />
-              Today’s Breakfast, Lunch &amp; Dinner Summary
+              Today’s Breakfast, Lunch &amp; Dinner Summary ({formatHumanDate(todayStr)})
             </h2>
             <p className="text-xs text-slate-500">
-              Live scheduled menus, student selections, and walk-in entitlement buffers
+              Live scheduled menus for {todayStr}, student selections, and walk-in entitlement buffers
             </p>
           </div>
           <Button
@@ -245,17 +252,17 @@ export default function OverviewTab({ onNavigateTab }) {
           </Button>
         </div>
 
-        {menus.length === 0 ? (
+        {todayMenus.length === 0 ? (
           <div className="p-8 rounded-2xl bg-cream-50 border border-dashed border-slate-300 text-center space-y-3">
             <div className="w-11 h-11 rounded-2xl bg-brand-50 text-brand-800 flex items-center justify-center mx-auto">
               <Utensils className="w-5 h-5" />
             </div>
             <div className="space-y-1">
               <h3 className="text-sm font-bold text-slate-900">
-                No menus yet. Create your first menu
+                No menus scheduled for {formatHumanDate(todayStr)} yet
               </h3>
               <p className="text-xs text-slate-500 max-w-md mx-auto">
-                Publish your Breakfast, Lunch, and Dinner dishes so students can view macros and submit meal preferences.
+                Publish your Breakfast, Lunch, and Dinner dishes for today ({todayStr}) so students can view macros and submit meal preferences.
               </p>
             </div>
             <Button
@@ -264,19 +271,15 @@ export default function OverviewTab({ onNavigateTab }) {
               icon={Plus}
               onClick={() => onNavigateTab('menus')}
             >
-              Create First Menu
+              Schedule Today’s Menu
             </Button>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {['breakfast', 'lunch', 'dinner'].map((mealType) => {
-              const menu =
-                displayMenus.find(
-                  (m) => String(m.meal_type).toLowerCase() === mealType
-                ) ||
-                menus.find(
-                  (m) => String(m.meal_type).toLowerCase() === mealType
-                );
+              const menu = displayMenus.find(
+                (m) => String(m.meal_type || '').toLowerCase() === mealType
+              );
 
               if (!menu) {
                 return (
@@ -292,7 +295,7 @@ export default function OverviewTab({ onNavigateTab }) {
                         <Badge variant="neutral">Not Scheduled</Badge>
                       </div>
                       <p className="text-xs text-slate-500">
-                        No {mealType} menu created yet.
+                        No {mealType} menu created for {formatHumanDate(todayStr)} yet.
                       </p>
                     </div>
                     <Button

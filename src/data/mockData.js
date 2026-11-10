@@ -1,7 +1,8 @@
 // Initial Demo Mode seed data & landing page datasets for SmartBite FoodTech SaaS
+import { getTodayDateStr, getTomorrowDateStr } from '../lib/dateUtils';
 
-const todayStr = new Date().toISOString().split('T')[0];
-const tomorrowDate = new Date(Date.now() + 86400000).toISOString().split('T')[0];
+const todayStr = getTodayDateStr();
+const tomorrowDate = getTomorrowDateStr();
 
 export const initialMessProfile = {
   id: 'mess-demo-001',

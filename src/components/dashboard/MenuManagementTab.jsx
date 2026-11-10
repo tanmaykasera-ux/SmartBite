@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Utensils,
   Plus,
@@ -18,6 +18,12 @@ import Badge from '../common/Badge';
 import Button from '../common/Button';
 import { useData } from '../../context/DataContext';
 import { uploadFoodImage } from '../../lib/supabase';
+import {
+  getTodayDateStr,
+  getTomorrowDateStr,
+  normalizeDateStr,
+  formatHumanDate,
+} from '../../lib/dateUtils';
 
 const emptyDishForm = {
   id: '',
@@ -35,14 +41,19 @@ const emptyDishForm = {
 export default function MenuManagementTab() {
   const { menus, saveMenu, addOrUpdateMenuItem, deleteMenuItem } = useData();
 
-  const todayStr = new Date().toISOString().split('T')[0];
+  const todayStr = getTodayDateStr();
+  const tomorrowStr = getTomorrowDateStr();
   const [selectedDate, setSelectedDate] = useState(todayStr);
   const [selectedMealType, setSelectedMealType] = useState('lunch');
 
-  // Find or initialize the active menu for (selectedDate, selectedMealType)
-  const activeMenu = menus.find(
-    (m) => m.menu_date === selectedDate && m.meal_type === selectedMealType
-  ) || {
+  // Find or initialize the active menu strictly for (selectedDate, selectedMealType)
+  const existingMenuForDate = menus.find(
+    (m) =>
+      normalizeDateStr(m.menu_date) === normalizeDateStr(selectedDate) &&
+      String(m.meal_type || '').toLowerCase() === selectedMealType
+  );
+
+  const activeMenu = existingMenuForDate || {
     id: `menu-${selectedMealType}-${selectedDate}`,
     menu_date: selectedDate,
     meal_type: selectedMealType,
@@ -55,7 +66,9 @@ export default function MenuManagementTab() {
 
   const [menuTitle, setMenuTitle] = useState(activeMenu.title || '');
   const [deadline, setDeadline] = useState(
-    activeMenu.selection_deadline ? activeMenu.selection_deadline.slice(0, 16) : `${selectedDate}T09:30`
+    activeMenu.selection_deadline
+      ? activeMenu.selection_deadline.slice(0, 16)
+      : `${selectedDate}T09:30`
   );
   const [notes, setNotes] = useState(activeMenu.notes || '');
   const [statusMessage, setStatusMessage] = useState('');
@@ -65,19 +78,42 @@ export default function MenuManagementTab() {
   const [dishForm, setDishForm] = useState(emptyDishForm);
   const [uploadingImg, setUploadingImg] = useState(false);
 
-  const handleSwitchSession = (dateVal, mealVal) => {
-    setSelectedDate(dateVal);
-    setSelectedMealType(mealVal);
-    const found = menus.find((m) => m.menu_date === dateVal && m.meal_type === mealVal);
+  // Sync form fields whenever selectedDate, selectedMealType, or the underlying Supabase menu record changes
+  useEffect(() => {
+    const found = menus.find(
+      (m) =>
+        normalizeDateStr(m.menu_date) === normalizeDateStr(selectedDate) &&
+        String(m.meal_type || '').toLowerCase() === selectedMealType
+    );
     if (found) {
       setMenuTitle(found.title || '');
-      setDeadline(found.selection_deadline ? found.selection_deadline.slice(0, 16) : `${dateVal}T09:30`);
+      setDeadline(
+        found.selection_deadline
+          ? found.selection_deadline.slice(0, 16)
+          : `${selectedDate}T09:30`
+      );
       setNotes(found.notes || '');
     } else {
-      setMenuTitle(`${mealVal.charAt(0).toUpperCase() + mealVal.slice(1)} Institutional Menu`);
-      setDeadline(`${dateVal}T09:30`);
+      setMenuTitle(
+        `${selectedMealType.charAt(0).toUpperCase() + selectedMealType.slice(1)} Institutional Menu`
+      );
+      setDeadline(`${selectedDate}T09:30`);
       setNotes('');
     }
+  }, [
+    selectedDate,
+    selectedMealType,
+    existingMenuForDate?.id,
+    existingMenuForDate?.title,
+    existingMenuForDate?.selection_deadline,
+    existingMenuForDate?.notes,
+  ]);
+
+  const handleSwitchSession = (dateVal, mealVal) => {
+    const normalizedDate = normalizeDateStr(dateVal) || todayStr;
+    setSelectedDate(normalizedDate);
+    setSelectedMealType(mealVal);
+    setShowDishForm(false);
     setStatusMessage('');
   };
 
@@ -95,8 +131,12 @@ export default function MenuManagementTab() {
 
     setStatusMessage(
       publishStatus === 'published'
-        ? `Menu published for ${ saved.meal_type.toUpperCase() } (${ saved.menu_date })! Instant notification sent to all registered students.`
-        : `Draft saved for ${ saved.meal_type.toUpperCase() } (${ saved.menu_date }).`
+        ? `Menu published for ${saved.meal_type.toUpperCase()} on ${formatHumanDate(
+            saved.menu_date
+          )} (${saved.menu_date})! Instant notification sent to all registered students.`
+        : `Draft saved for ${saved.meal_type.toUpperCase()} on ${formatHumanDate(
+            saved.menu_date
+          )} (${saved.menu_date}).`
     );
   };
 
@@ -146,12 +186,18 @@ export default function MenuManagementTab() {
     await addOrUpdateMenuItem(ensuredMenu.id, dishForm);
     setShowDishForm(false);
     setDishForm(emptyDishForm);
-    setStatusMessage(`Dish "${dishForm.name}" saved to ${selectedMealType.toUpperCase()} menu.`);
+    setStatusMessage(
+      `Dish "${dishForm.name}" saved to ${selectedMealType.toUpperCase()} menu for ${formatHumanDate(
+        selectedDate
+      )} (${selectedDate}).`
+    );
   };
 
   const handleDeleteDish = async (dishId, dishName) => {
     await deleteMenuItem(activeMenu.id, dishId);
-    setStatusMessage(`Removed "${dishName}" from menu.`);
+    setStatusMessage(
+      `Removed "${dishName}" from ${selectedMealType.toUpperCase()} menu (${selectedDate}).`
+    );
   };
 
   const totalCalories = (activeMenu.items || []).reduce((s, i) => s + Number(i.calories || 0), 0);
@@ -167,14 +213,39 @@ export default function MenuManagementTab() {
           <div>
             <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
               <Utensils className="w-5 h-5 text-brand-700" />
-              Menu Scheduling &amp; Dish Builder
+              Menu Scheduling &amp; Dish Builder — {formatHumanDate(selectedDate)}
             </h2>
             <p className="text-xs text-slate-500">
-              Schedule Breakfast, Lunch, and Dinner menus, set student selection deadlines, and publish with full nutrition transparency.
+              Schedule date-specific Breakfast, Lunch, and Dinner menus, set student selection deadlines, and publish with full nutrition transparency.
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2.5">
+            <div className="inline-flex rounded-xl bg-cream-100 p-1 border border-slate-200">
+              <button
+                type="button"
+                onClick={() => handleSwitchSession(todayStr, selectedMealType)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                  selectedDate === todayStr
+                    ? 'bg-brand-800 text-white shadow-sm'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Today ({todayStr})
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSwitchSession(tomorrowStr, selectedMealType)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                  selectedDate === tomorrowStr
+                    ? 'bg-brand-800 text-white shadow-sm'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Tomorrow ({tomorrowStr})
+              </button>
+            </div>
+
             <div className="flex items-center gap-2 bg-cream-50 px-3 py-1.5 rounded-xl border border-slate-200">
               <Calendar className="w-4 h-4 text-brand-700" />
               <input
@@ -502,10 +573,10 @@ export default function MenuManagementTab() {
           </div>
           <div className="space-y-1">
             <h3 className="text-base font-bold text-slate-900">
-              No Dishes Added for {selectedMealType.toUpperCase()} on {selectedDate}
+              No Dishes Added for {selectedMealType.toUpperCase()} on {formatHumanDate(selectedDate)} ({selectedDate})
             </h3>
             <p className="text-xs text-slate-500 max-w-md mx-auto">
-              Click &ldquo;Add Food Item&rdquo; above to add dishes with ingredients, serving sizes, and macro-nutrients.
+              Click &ldquo;Add Food Item&rdquo; above to add dishes with ingredients, serving sizes, and macro-nutrients for {formatHumanDate(selectedDate)}.
             </p>
           </div>
           <Button variant="primary" size="sm" icon={Plus} onClick={handleOpenAddDish}>
