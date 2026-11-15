@@ -69,27 +69,27 @@ export default function WorkspacePreviewPage() {
                 <Users className="w-4 h-4 text-brand-700" />
               </div>
               <p className="text-2xl font-extrabold text-slate-900">
-                {role === 'student' ? '2,030 kcal / 73g Protein' : '1,052 / 1,200 Students'}
+                {role === 'student' ? '2,030 kcal / 73g Protein' : '1,026 Plates Expected'}
               </p>
               <p className="text-xs text-brand-700 font-semibold">
                 {role === 'student'
-                  ? 'ICMR-NIN Balanced Hostel Diet'
-                  : 'Includes +62 Walk-In Entitlement Buffer'}
+                  ? 'Estimate based on the standard plate'
+                  : 'Includes +36 Guest & Safety Buffer Plates'}
               </p>
             </Card>
 
             <Card className="p-5 space-y-1">
               <div className="flex items-center justify-between text-xs text-slate-500">
-                <span>{role === 'student' ? 'My Dining Entitlement' : 'Food Waste Prevented (7d)'}</span>
+                <span>{role === 'student' ? 'My Dining Entitlement' : 'Leftover Plates Prevented (7d)'}</span>
                 <TrendingDown className="w-4 h-4 text-brand-700" />
               </div>
               <p className="text-2xl font-extrabold text-brand-800">
-                {role === 'student' ? 'Active & Unconditional' : '565 kg Saved'}
+                {role === 'student' ? 'Active & Unconditional' : '1,015 Plates Saved'}
               </p>
               <p className="text-xs text-slate-500">
                 {role === 'student'
-                  ? 'Valid whether or not you submit a poll'
-                  : '₹84,750 saved in raw kitchen ingredients'}
+                  ? 'Not responding means you are counted as attending'
+                  : '₹55,825 saved in leftover plate waste'}
               </p>
             </Card>
 
@@ -102,7 +102,7 @@ export default function WorkspacePreviewPage() {
                 {role === 'student' ? '₹0 (Free Forever)' : '4.7 / 5.0 ★'}
               </p>
               <p className="text-xs text-brand-700 font-semibold">
-                {role === 'student' ? 'Sponsored by Your Institution' : 'Based on 840 student ratings today'}
+                {role === 'student' ? 'Sponsored by Your Institution' : 'Based on 840 student dish ratings'}
               </p>
             </Card>
           </div>
@@ -114,13 +114,13 @@ export default function WorkspacePreviewPage() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <Card className="p-5 space-y-3">
               <h3 className="text-sm font-bold text-slate-900">
-                Weekly Kitchen Preparation vs. Actual Consumption (kg)
+                Weekly Kitchen Prep (plates) vs. Actual Plates Served
               </h3>
               <WasteReductionAreaChart />
             </Card>
             <Card className="p-5 space-y-3">
               <h3 className="text-sm font-bold text-slate-900">
-                Student Meal Poll Signals &amp; Walk-In Buffer
+                Attendance Poll Signals &amp; Buffer (plates)
               </h3>
               <MealDemandBarChart />
             </Card>

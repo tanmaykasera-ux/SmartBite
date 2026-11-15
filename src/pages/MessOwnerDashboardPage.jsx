@@ -42,7 +42,7 @@ import SettingsTab from '../components/dashboard/SettingsTab';
 const sidebarModules = [
   { id: 'overview', label: 'Overview', icon: LayoutDashboard },
   { id: 'menus', label: 'Menu Management', icon: Utensils },
-  { id: 'selections', label: 'Student Selections', icon: Users },
+  { id: 'selections', label: 'Attendance Polls', icon: Users },
   { id: 'forecasting', label: 'Demand Forecasting', icon: BrainCircuit },
   { id: 'waste', label: 'Food Waste', icon: TrendingDown },
   { id: 'inventory', label: 'Inventory', icon: Package },
@@ -191,7 +191,7 @@ export default function MessOwnerDashboardPage() {
                 <span>Entitlement Guaranteed</span>
               </div>
               <p className="text-[10px] text-brand-200/85 leading-relaxed">
-                All {messProfile.registered_students} students retain full meal entitlement with or without pre-selection.
+                All {messProfile.registered_students} students default to Attending and retain full meal entitlement whether or not they respond to a poll.
               </p>
             </div>
           )}

@@ -5,6 +5,7 @@ import React, {
   useEffect,
   useCallback,
   useMemo,
+  useRef,
 } from 'react';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { useAuth, generateJoinCode } from './AuthContext';
@@ -12,6 +13,7 @@ import {
   initialMessProfile,
   initialMenus,
   initialStudentsList,
+  initialAttendanceResponses,
   initialHistoricalSelections,
   initialWasteLogs,
   weeklyConsumptionVsWasteSeries,
@@ -42,6 +44,13 @@ import {
   getTodayDateStr,
   normalizeDateStr,
   formatHumanDate,
+  getWeekStartDateStr,
+  getWeekDays,
+  addDaysToDateStr,
+  getDayOfWeekIndex,
+  getDayOfWeekName,
+  computeMealPollWindow,
+  getNextActivePollMeal,
 } from '../lib/dateUtils';
 
 const DataContext = createContext(null);
@@ -79,8 +88,18 @@ function createEmptyMessProfile(user) {
     breakfast_time: '07:30 AM - 09:30 AM',
     lunch_time: '12:30 PM - 02:30 PM',
     dinner_time: '07:30 PM - 09:30 PM',
-    default_cutoff_hours: 4,
-    walk_in_buffer_pct: 8,
+    breakfast_start: '07:30',
+    breakfast_end: '09:30',
+    lunch_start: '12:30',
+    lunch_end: '14:30',
+    dinner_start: '19:30',
+    dinner_end: '21:30',
+    default_cutoff_hours: 2,
+    cutoff_hours: 2,
+    walk_in_buffer_pct: 5,
+    guest_buffer_pct: 5,
+    safety_buffer_pct: 5,
+    cost_per_plate: 65,
     status: 'active',
   };
 }
@@ -108,8 +127,9 @@ export function DataProvider({ children }) {
   const [dataError, setDataError] = useState('');
   const [studentsQueryError, setStudentsQueryError] = useState('');
   const [selectionsQueryError, setSelectionsQueryError] = useState('');
+  const notifiedPollsRef = useRef(new Set());
 
-  // Shared Mess & Operational State (Empty by default when Supabase is connected; sample data ONLY in Demo Mode)
+  // Shared Mess & Operational State
   const [messProfile, setMessProfile] = useState(() =>
     isDemoMode
       ? loadDemoLocal('sb_demo_mess_profile', initialMessProfile)
@@ -121,7 +141,11 @@ export function DataProvider({ children }) {
   const [students, setStudents] = useState(() =>
     isDemoMode ? loadDemoLocal('sb_demo_students', initialStudentsList) : []
   );
-  const [mealSelectionsRows, setMealSelectionsRows] = useState([]);
+  const [attendanceResponses, setAttendanceResponses] = useState(() =>
+    isDemoMode
+      ? loadDemoLocal('sb_demo_attendance_responses', initialAttendanceResponses)
+      : []
+  );
   const [historicalSelections, setHistoricalSelections] = useState(() =>
     isDemoMode
       ? loadDemoLocal('sb_demo_hist_selections', initialHistoricalSelections)
@@ -228,6 +252,7 @@ export function DataProvider({ children }) {
     saveDemoLocal('sb_demo_mess_profile', messProfile);
     saveDemoLocal('sb_demo_menus', menus);
     saveDemoLocal('sb_demo_students', students);
+    saveDemoLocal('sb_demo_attendance_responses', attendanceResponses);
     saveDemoLocal('sb_demo_hist_selections', historicalSelections);
     saveDemoLocal('sb_demo_forecast_overrides_map', forecastOverridesMap);
     saveDemoLocal('sb_demo_holidays_events', holidaysEvents);
@@ -252,6 +277,7 @@ export function DataProvider({ children }) {
     messProfile,
     menus,
     students,
+    attendanceResponses,
     historicalSelections,
     forecastOverridesMap,
     holidaysEvents,
@@ -279,6 +305,9 @@ export function DataProvider({ children }) {
       setMessProfile(loadDemoLocal('sb_demo_mess_profile', initialMessProfile));
       setMenus(loadDemoLocal('sb_demo_menus', initialMenus));
       setStudents(loadDemoLocal('sb_demo_students', initialStudentsList));
+      setAttendanceResponses(
+        loadDemoLocal('sb_demo_attendance_responses', initialAttendanceResponses)
+      );
       setHistoricalSelections(
         loadDemoLocal('sb_demo_hist_selections', initialHistoricalSelections)
       );
@@ -329,11 +358,10 @@ export function DataProvider({ children }) {
       );
       setPlatformGrowthSeries(demoPlatformGrowthSeries);
     } else {
-      // Live Supabase Mode: Reset all state to empty/zero before loading real rows
       setMessProfile(createEmptyMessProfile(user));
       setMenus([]);
       setStudents([]);
-      setMealSelectionsRows([]);
+      setAttendanceResponses([]);
       setHistoricalSelections([]);
       setForecastOverridesMap({});
       setHolidaysEvents([]);
@@ -368,17 +396,6 @@ export function DataProvider({ children }) {
       const messId = user.messId;
 
       if (messId) {
-        console.log(
-          '[SmartBite][StudentsQuery] Executing query:',
-          `supabase.from('students').select('*').eq('mess_id', '${messId}')`,
-          {
-            messId,
-            ownerUserId: user.id,
-            role: user.role,
-            messName: user.messName,
-          }
-        );
-
         // Students must ONLY see menus from their own mess AND with publish_status = 'published'
         let menusQuery = supabase
           .from('menus')
@@ -400,7 +417,8 @@ export function DataProvider({ children }) {
           stuRes,
           holRes,
           attRes,
-          selRes,
+          pollRes,
+          legacySelRes,
         ] = await Promise.all([
           supabase.from('messes').select('*').eq('id', messId).maybeSingle(),
           menusQuery.order('menu_date', { ascending: false }),
@@ -437,33 +455,18 @@ export function DataProvider({ children }) {
             .eq('mess_id', messId)
             .order('record_date', { ascending: true }),
           supabase
+            .from('meal_attendance_responses')
+            .select('*')
+            .eq('mess_id', messId),
+          supabase
             .from('meal_selections')
-            .select('*, selection_items(*)')
+            .select('*')
             .eq('mess_id', messId),
         ]);
-
-        console.log('[SmartBite][StudentsQuery] Raw Supabase response:', {
-          query: `SELECT * FROM public.students WHERE mess_id = '${messId}'`,
-          messId,
-          data: stuRes.data,
-          error: stuRes.error,
-          rowCount: Array.isArray(stuRes.data) ? stuRes.data.length : 0,
-        });
-
-        console.log('[SmartBite][MealSelectionsQuery] Raw Supabase response:', {
-          query: `SELECT *, selection_items(*) FROM public.meal_selections WHERE mess_id = '${messId}'`,
-          messId,
-          data: selRes.data,
-          error: selRes.error,
-          rowCount: Array.isArray(selRes.data) ? selRes.data.length : 0,
-        });
 
         // Only students whose mess_id matches this mess
         const realStudents = (stuRes.data || []).filter(
           (s) => s.mess_id === messId
-        );
-        const realStudentProfileIds = new Set(
-          realStudents.map((s) => s.profile_id).filter(Boolean)
         );
         const studentByProfileId = {};
         realStudents.forEach((s) => {
@@ -471,152 +474,83 @@ export function DataProvider({ children }) {
           if (s.id) studentByProfileId[s.id] = s;
         });
 
-        // Deduplicate meal_selections by id (or menu_id + student_id) and scope strictly to messId
-        const seenSelectionKeys = new Set();
-        const realSelections = (selRes.data || []).filter((sel) => {
-          if (!sel || sel.mess_id !== messId) return false;
-          const dedupKey = sel.id || `${sel.menu_id}_${sel.student_id}`;
-          if (seenSelectionKeys.has(dedupKey)) return false;
-          seenSelectionKeys.add(dedupKey);
-          return true;
-        });
-
-        if (selRes.error) {
-          const selErrMsg = `Failed to load student meal selections from public.meal_selections (mess_id=${messId}): ${
-            selRes.error.message || JSON.stringify(selRes.error)
-          }${selRes.error.code ? ` [Code: ${selRes.error.code}]` : ''}.`;
-          console.error('[SmartBite][MealSelectionsQuery] Query failed:', selErrMsg, selRes.error);
-          setSelectionsQueryError(selErrMsg);
-        }
-
         if (stuRes.error) {
           const errMsg = `Failed to load registered students from public.students (mess_id=${messId}): ${
             stuRes.error.message || JSON.stringify(stuRes.error)
           }${stuRes.error.code ? ` [Code: ${stuRes.error.code}]` : ''}. Please run migration 005_fix_owner_students_policy.sql in the Supabase SQL Editor.`;
-          console.error('[SmartBite][StudentsQuery] Query failed:', errMsg, stuRes.error);
           setStudentsQueryError(errMsg);
           setDataError(errMsg);
-        } else if (
-          user.role === 'mess_owner' &&
-          realStudents.length === 0 &&
-          (realSelections.length > 0 || Number(messRes.data?.registered_students || 0) > 0)
-        ) {
-          const rlsWarning = `RLS policy blocked SELECT on public.students for mess_id=${messId} (0 student rows returned while ${
-            realSelections.length || Number(messRes.data?.registered_students || 0)
-          } student selection/registration record(s) exist). Please run supabase/migrations/005_fix_owner_students_policy.sql in the Supabase SQL Editor.`;
-          console.error('[SmartBite][StudentsQuery] RLS block detected:', rlsWarning);
-          setStudentsQueryError(rlsWarning);
-          setDataError(rlsWarning);
         }
 
-        // Count real dish selections per menu_item_id and student meal selection flags
-        const dishSelectionCounts = {};
-        const studentMealFlags = {}; // student_id -> { breakfast_selected, lunch_selected, dinner_selected, breakfast_dishes, lunch_dishes, dinner_dishes }
-        const menuMealTypeById = {};
+        // Map menus by id for reference
         const menuById = {};
-        const menuItemById = {};
-
         (menusRes.data || []).forEach((m) => {
           menuById[m.id] = m;
-          menuMealTypeById[m.id] = String(m.meal_type || '').toLowerCase();
-          (m.menu_items || []).forEach((mi) => {
-            menuItemById[mi.id] = mi;
-          });
         });
 
-        const enrichedSelections = [];
+        // Merge attendance poll responses from `meal_attendance_responses` (and legacy `meal_selections` if table 006 is not yet created)
+        const combinedPollMap = new Map();
 
-        realSelections.forEach((sel) => {
-          // Only count selections from students belonging to this mess (or current student)
-          if (
-            realStudentProfileIds.size > 0 &&
-            sel.student_id &&
-            !realStudentProfileIds.has(sel.student_id)
-          ) {
-            return;
-          }
-          const mObj = menuById[sel.menu_id];
-          const mType = menuMealTypeById[sel.menu_id] || '';
-          const matchedStu = studentByProfileId[sel.student_id];
-
-          // Deduplicate selection_items by menu_item_id
-          const seenItemIds = new Set();
-          const selectedDishesList = [];
-
-          (sel.selection_items || []).forEach((si) => {
-            if (!si || !si.selected || !si.menu_item_id) return;
-            if (seenItemIds.has(si.menu_item_id)) return;
-            seenItemIds.add(si.menu_item_id);
-
-            if (sel.will_attend) {
-              dishSelectionCounts[si.menu_item_id] =
-                (dishSelectionCounts[si.menu_item_id] || 0) + 1;
-            }
-
-            const dishMeta = menuItemById[si.menu_item_id];
-            selectedDishesList.push({
-              id: si.menu_item_id,
-              name: dishMeta?.name || dishMeta?.dish_name || 'Selected Dish',
-              serving_size: dishMeta?.serving_size || '',
-              calories: Number(dishMeta?.calories || 0),
-              protein: Number(dishMeta?.protein || 0),
+        if (!legacySelRes.error && Array.isArray(legacySelRes.data)) {
+          legacySelRes.data.forEach((sel) => {
+            if (!sel || sel.mess_id !== messId) return;
+            const mObj = menuById[sel.menu_id];
+            const mDate =
+              normalizeDateStr(mObj?.menu_date) ||
+              (sel.submitted_at ? normalizeDateStr(sel.submitted_at) : '');
+            const mType = String(mObj?.meal_type || 'lunch').toLowerCase();
+            if (!mDate || !sel.student_id) return;
+            const key = `${sel.student_id}_${mDate}_${mType}`;
+            const matchedStu = studentByProfileId[sel.student_id];
+            combinedPollMap.set(key, {
+              id: sel.id,
+              mess_id: messId,
+              student_id: sel.student_id,
+              menu_id: sel.menu_id || null,
+              student_name: matchedStu?.full_name || 'Registered Student',
+              student_roll_id: matchedStu?.student_roll_id || 'N/A',
+              hostel_name: matchedStu?.hostel_name || 'N/A',
+              meal_date: mDate,
+              menu_date: mDate,
+              meal_type: mType,
+              status: sel.will_attend === false ? 'not_coming' : 'attending',
+              will_attend: sel.will_attend !== false,
+              responded_at: sel.submitted_at || new Date().toISOString(),
             });
           });
+        }
 
-          if (sel.will_attend && mType && sel.student_id) {
-            if (!studentMealFlags[sel.student_id]) {
-              studentMealFlags[sel.student_id] = {
-                breakfast_dishes: [],
-                lunch_dishes: [],
-                dinner_dishes: [],
-              };
-            }
-            studentMealFlags[sel.student_id][`${mType}_selected`] = true;
-            const dishNames = selectedDishesList.map((d) => d.name);
-            if (dishNames.length > 0 && Array.isArray(studentMealFlags[sel.student_id][`${mType}_dishes`])) {
-              const existingNames = new Set(studentMealFlags[sel.student_id][`${mType}_dishes`]);
-              dishNames.forEach((n) => existingNames.add(n));
-              studentMealFlags[sel.student_id][`${mType}_dishes`] = Array.from(existingNames);
-            }
-          }
-
-          enrichedSelections.push({
-            ...sel,
-            student_name: matchedStu?.full_name || 'Registered Student',
-            student_roll_id: matchedStu?.student_roll_id || 'N/A',
-            hostel_name: matchedStu?.hostel_name || 'N/A',
-            menu_date:
-              normalizeDateStr(mObj?.menu_date) ||
-              (sel.submitted_at ? normalizeDateStr(sel.submitted_at) : ''),
-            meal_type: mType || 'lunch',
-            menu_title: mObj?.title || '',
-            selected_dishes: selectedDishesList,
-            selected_dishes_count: selectedDishesList.length,
+        if (!pollRes.error && Array.isArray(pollRes.data)) {
+          pollRes.data.forEach((row) => {
+            if (!row || row.mess_id !== messId) return;
+            const mDate = normalizeDateStr(row.meal_date);
+            const mType = String(row.meal_type || 'lunch').toLowerCase();
+            if (!mDate || !row.student_id) return;
+            const key = `${row.student_id}_${mDate}_${mType}`;
+            const matchedStu = studentByProfileId[row.student_id];
+            const isNotComing =
+              row.status === 'not_coming' || row.will_attend === false;
+            combinedPollMap.set(key, {
+              ...row,
+              student_name: matchedStu?.full_name || 'Registered Student',
+              student_roll_id: matchedStu?.student_roll_id || 'N/A',
+              hostel_name: matchedStu?.hostel_name || 'N/A',
+              meal_date: mDate,
+              menu_date: mDate,
+              meal_type: mType,
+              status: isNotComing ? 'not_coming' : 'attending',
+              will_attend: !isNotComing,
+              responded_at:
+                row.updated_at || row.responded_at || new Date().toISOString(),
+            });
           });
-        });
+        }
 
-        setMealSelectionsRows(enrichedSelections);
+        const mergedPollResponses = Array.from(combinedPollMap.values());
+        setAttendanceResponses(mergedPollResponses);
+        setStudents(realStudents);
 
-        const enrichedStudents = realStudents.map((s) => ({
-          ...s,
-          breakfast_selected: Boolean(
-            studentMealFlags[s.profile_id]?.breakfast_selected
-          ),
-          lunch_selected: Boolean(
-            studentMealFlags[s.profile_id]?.lunch_selected
-          ),
-          dinner_selected: Boolean(
-            studentMealFlags[s.profile_id]?.dinner_selected
-          ),
-          breakfast_dishes:
-            studentMealFlags[s.profile_id]?.breakfast_dishes || [],
-          lunch_dishes: studentMealFlags[s.profile_id]?.lunch_dishes || [],
-          dinner_dishes: studentMealFlags[s.profile_id]?.dinner_dishes || [],
-        }));
-        setStudents(enrichedStudents);
-
-        // Total Registered Students MUST be the real count from public.students where mess_id = messId
-        const realRegisteredCount = enrichedStudents.length;
+        const realRegisteredCount = realStudents.length;
 
         // Set Mess Profile strictly from DB row
         if (messRes.data) {
@@ -654,6 +588,20 @@ export function DataProvider({ children }) {
             join_code: activeJoinCode,
             capacity: Number(dbMess.capacity || 0),
             registered_students: realRegisteredCount,
+            default_cutoff_hours: Number(
+              dbMess.cutoff_hours ?? dbMess.default_cutoff_hours ?? 2
+            ),
+            cutoff_hours: Number(
+              dbMess.cutoff_hours ?? dbMess.default_cutoff_hours ?? 2
+            ),
+            walk_in_buffer_pct: Number(
+              dbMess.guest_buffer_pct ?? dbMess.walk_in_buffer_pct ?? 5
+            ),
+            guest_buffer_pct: Number(
+              dbMess.guest_buffer_pct ?? dbMess.walk_in_buffer_pct ?? 5
+            ),
+            safety_buffer_pct: Number(dbMess.safety_buffer_pct ?? 5),
+            cost_per_plate: Number(dbMess.cost_per_plate ?? 65),
           });
         } else {
           setMessProfile({
@@ -674,21 +622,65 @@ export function DataProvider({ children }) {
           return true;
         });
 
-        const mappedMenus = rawMenus.map((m) => ({
-          ...m,
-          menu_date: normalizeDateStr(m.menu_date) || m.menu_date,
-          meal_type: String(m.meal_type || 'lunch').toLowerCase(),
-          items: (m.menu_items || []).map((item) => ({
-            ...item,
-            name: item.name || item.dish_name || '',
-            dish_name: item.name || item.dish_name || '',
-            selected_count: dishSelectionCounts[item.id] || 0,
-          })),
-        }));
+        const mappedMenus = rawMenus.map((m) => {
+          const cleanDate = normalizeDateStr(m.menu_date) || m.menu_date;
+          return {
+            ...m,
+            menu_date: cleanDate,
+            week_start_date:
+              normalizeDateStr(m.week_start_date) ||
+              getWeekStartDateStr(cleanDate),
+            day_of_week:
+              m.day_of_week !== undefined && m.day_of_week !== null
+                ? Number(m.day_of_week)
+                : getDayOfWeekIndex(cleanDate),
+            day_name: m.day_name || getDayOfWeekName(cleanDate),
+            meal_type: String(m.meal_type || 'lunch').toLowerCase(),
+            items: (m.menu_items || []).map((item) => ({
+              ...item,
+              name: item.name || item.dish_name || '',
+              dish_name: item.name || item.dish_name || '',
+              ingredient_quantities: Array.isArray(item.ingredient_quantities)
+                ? item.ingredient_quantities
+                : [],
+            })),
+          };
+        });
         setMenus(mappedMenus);
 
-        // Set Waste Logs & compute Weekly Series strictly from DB rows
-        const realWasteLogs = wasteRes.data || [];
+        // Set Waste Logs & compute Weekly Series in PLATES strictly from DB rows
+        const realWasteLogs = (wasteRes.data || []).map((log) => {
+          const platesPrep = Math.round(
+            Number(log.plates_prepared ?? log.prepared_kg ?? 0)
+          );
+          const platesServed = Math.round(
+            Number(log.plates_served ?? log.consumed_kg ?? 0)
+          );
+          const leftoverPlates =
+            log.leftover_plates !== undefined && log.leftover_plates !== null
+              ? Math.round(Number(log.leftover_plates))
+              : log.leftover_kg !== undefined && log.leftover_kg !== null
+              ? Math.round(Number(log.leftover_kg))
+              : Math.max(0, platesPrep - platesServed);
+          const costPerPlate = Number(
+            log.cost_per_plate ?? log.unit_cost_inr ?? 65
+          );
+          return {
+            ...log,
+            plates_prepared: platesPrep,
+            plates_served: platesServed,
+            leftover_plates: leftoverPlates,
+            cost_per_plate: costPerPlate,
+            cost:
+              log.cost !== undefined && log.cost !== null
+                ? Number(log.cost)
+                : leftoverPlates * costPerPlate,
+            waste_percentage:
+              platesPrep > 0
+                ? Number(((leftoverPlates / platesPrep) * 100).toFixed(2))
+                : 0,
+          };
+        });
         setWasteLogs(realWasteLogs);
 
         if (realWasteLogs.length > 0) {
@@ -701,21 +693,21 @@ export function DataProvider({ children }) {
               if (!groupedByDate[dKey]) {
                 groupedByDate[dKey] = {
                   day: dKey,
-                  preparedKg: 0,
-                  consumedKg: 0,
-                  wasteKg: 0,
-                  traditionalWasteKg: 0,
+                  platesPrepared: 0,
+                  platesServed: 0,
+                  leftoverPlates: 0,
+                  traditionalWastePlates: 0,
                   wasteCostInr: 0,
                 };
               }
-              groupedByDate[dKey].preparedKg = Number(
-                (groupedByDate[dKey].preparedKg + Number(log.prepared_kg || 0)).toFixed(1)
+              groupedByDate[dKey].platesPrepared += Number(
+                log.plates_prepared || 0
               );
-              groupedByDate[dKey].consumedKg = Number(
-                (groupedByDate[dKey].consumedKg + Number(log.consumed_kg || 0)).toFixed(1)
+              groupedByDate[dKey].platesServed += Number(
+                log.plates_served || 0
               );
-              groupedByDate[dKey].wasteKg = Number(
-                (groupedByDate[dKey].wasteKg + Number(log.leftover_kg || 0)).toFixed(1)
+              groupedByDate[dKey].leftoverPlates += Number(
+                log.leftover_plates || 0
               );
               groupedByDate[dKey].wasteCostInr = Math.round(
                 groupedByDate[dKey].wasteCostInr + Number(log.cost || 0)
@@ -732,7 +724,9 @@ export function DataProvider({ children }) {
           (txRes.data || []).map((tx) => ({
             ...tx,
             ingredient_name:
-              tx.inventory_items?.ingredient_name || tx.ingredient_name || 'Ingredient',
+              tx.inventory_items?.ingredient_name ||
+              tx.ingredient_name ||
+              'Ingredient',
             unit: tx.inventory_items?.unit || tx.unit || 'kg',
           }))
         );
@@ -758,12 +752,15 @@ export function DataProvider({ children }) {
                 registered: Number(rec.total_registered || 0),
               };
             }
+            const servedOrExpected = Number(
+              rec.plates_served || rec.expected_plates || rec.selected_count || 0
+            );
             if (rec.meal_type === 'breakfast')
-              histByDate[d].breakfastSelected = Number(rec.selected_count || 0);
+              histByDate[d].breakfastSelected = servedOrExpected;
             if (rec.meal_type === 'lunch')
-              histByDate[d].lunchSelected = Number(rec.selected_count || 0);
+              histByDate[d].lunchSelected = servedOrExpected;
             if (rec.meal_type === 'dinner')
-              histByDate[d].dinnerSelected = Number(rec.selected_count || 0);
+              histByDate[d].dinnerSelected = servedOrExpected;
             histByDate[d].unpolledWalkIns += Number(
               rec.unselected_walkin_count || 0
             );
@@ -773,7 +770,7 @@ export function DataProvider({ children }) {
           setHistoricalSelections([]);
         }
 
-        // Populate current Student's selections & meal history if role === 'student'
+        // Populate current Student's poll responses & meal history if role === 'student'
         if (user.role === 'student') {
           const ownStudentRow = realStudents.find(
             (s) => s.profile_id === user.id || s.email === user.email
@@ -794,75 +791,74 @@ export function DataProvider({ children }) {
             }));
           }
 
-          const ownSelections = realSelections.filter(
-            (s) => s.student_id === user.id
+          const ownResponses = mergedPollResponses.filter(
+            (r) => r.student_id === user.id
           );
           const nextSelMap = {};
           const nextHist = [];
 
-          ownSelections.forEach((sel) => {
-            const menuObj =
-              mappedMenus.find((m) => m.id === sel.menu_id) ||
-              menuById[sel.menu_id];
-            const mDate = normalizeDateStr(menuObj?.menu_date);
-            const mTypeLower = String(menuObj?.meal_type || 'lunch').toLowerCase();
+          ownResponses.forEach((resp) => {
+            const mDate = normalizeDateStr(resp.meal_date);
+            const mTypeLower = String(resp.meal_type || 'lunch').toLowerCase();
             const mTypeCap =
               mTypeLower.charAt(0).toUpperCase() + mTypeLower.slice(1);
-            const dishIds = (sel.selection_items || [])
-              .filter((si) => si.selected)
-              .map((si) => si.menu_item_id);
+            const menuObj = mappedMenus.find(
+              (m) =>
+                normalizeDateStr(m.menu_date) === mDate &&
+                String(m.meal_type || '').toLowerCase() === mTypeLower
+            );
 
             const record = {
-              menu_id: sel.menu_id,
-              meal_type: mTypeCap,
+              menu_id: menuObj?.id || resp.menu_id || `${mDate}_${mTypeLower}`,
+              meal_type: mTypeLower,
+              meal_date: mDate,
               menu_date: mDate,
-              will_attend: sel.will_attend,
-              portion_preference: sel.portion_preference || 'regular',
-              selected_dish_ids: dishIds,
-              selectedDishIds: dishIds,
+              status: resp.status,
+              will_attend: resp.will_attend,
               entitlement_retained: true,
-              updated_at: sel.submitted_at,
+              updated_at: resp.responded_at,
             };
 
-            nextSelMap[sel.menu_id] = record;
-            if (mDate) {
-              nextSelMap[`${mDate}_${mTypeCap}`] = record;
-              nextSelMap[`${mDate}_${mTypeLower}`] = record;
+            nextSelMap[`${mDate}_${mTypeLower}`] = record;
+            nextSelMap[`${mDate}_${mTypeCap}`] = record;
+            if (menuObj?.id) {
+              nextSelMap[menuObj.id] = record;
             }
 
             if (menuObj) {
-              const chosenDishes = (menuObj.items || []).filter((d) =>
-                dishIds.includes(d.id)
-              );
-              const cals = chosenDishes.reduce(
+              const allItems = menuObj.items || [];
+              const cals = allItems.reduce(
                 (s, d) => s + Number(d.calories || 0),
                 0
               );
-              const prot = chosenDishes.reduce(
+              const prot = allItems.reduce(
                 (s, d) => s + Number(d.protein || 0),
                 0
               );
-              const carbs = chosenDishes.reduce(
+              const carbs = allItems.reduce(
                 (s, d) => s + Number(d.carbs || 0),
                 0
               );
-              const fats = chosenDishes.reduce(
+              const fats = allItems.reduce(
                 (s, d) => s + Number(d.fats || 0),
                 0
               );
 
               nextHist.push({
-                id: sel.id,
+                id: resp.id || `hist-${mDate}-${mTypeLower}`,
                 meal_date: mDate,
                 meal_type: mTypeCap,
-                dishes: chosenDishes.map(
-                  (d) => `${d.name} (${d.serving_size})`
+                title: menuObj.title || `${mTypeCap} Menu`,
+                dishes: allItems.map(
+                  (d) => `${d.name} (${d.serving_size || '1 Plate'})`
                 ),
                 calories: cals,
                 protein: Number(prot.toFixed(1)),
                 carbs: Number(carbs.toFixed(1)),
                 fats: Number(fats.toFixed(1)),
-                status: sel.will_attend ? 'Confirmed' : 'Skipped (Entitled)',
+                status: resp.will_attend
+                  ? 'Attended (Standard Plate)'
+                  : 'Skipped (Marked Not Coming)',
               });
             }
           });
@@ -1049,26 +1045,81 @@ export function DataProvider({ children }) {
     refreshFromSupabase();
   }, [refreshFromSupabase]);
 
+  // Shared student list and registered count used by Overview, Attendance Polls, and Forecasting
+  const messStudents = useMemo(() => {
+    if (isDemoMode) return students;
+    if (!user?.messId) return [];
+    return students.filter((s) => s.mess_id === user.messId);
+  }, [isDemoMode, students, user?.messId]);
+
+  const totalRegisteredStudents = useMemo(() => {
+    if (isDemoMode) {
+      return Number(messProfile.registered_students || messStudents.length || 0);
+    }
+    return messStudents.length;
+  }, [isDemoMode, messProfile.registered_students, messStudents.length]);
+
+  // Surface an in-app notification for the student when their next meal's attendance poll is open
+  useEffect(() => {
+    if (!user || user.role !== 'student') return;
+    const nextPoll = getNextActivePollMeal(messProfile);
+    if (!nextPoll || nextPoll.isLocked) return;
+
+    const pollKey = `${nextPoll.mealDate}_${nextPoll.mealType}`;
+    if (notifiedPollsRef.current.has(pollKey)) return;
+    notifiedPollsRef.current.add(pollKey);
+
+    const mealLabel =
+      nextPoll.mealType.charAt(0).toUpperCase() + nextPoll.mealType.slice(1);
+    const notifTitle = `Attendance Poll Open: ${mealLabel} (${formatHumanDate(
+      nextPoll.mealDate
+    )})`;
+
+    setNotifications((prev) => {
+      if (prev.some((n) => n.title === notifTitle)) return prev;
+      return [
+        {
+          id: `notif-poll-${pollKey}`,
+          title: notifTitle,
+          message: `Will you have ${nextPoll.mealType} on ${formatHumanDate(
+            nextPoll.mealDate
+          )}? Default is Attending. If you plan to skip, mark "I will NOT be coming" before ${
+            nextPoll.closesAtFormatted
+          }.`,
+          notification_type: 'poll_open',
+          recipient_role: 'student',
+          is_read: false,
+          created_at: new Date().toISOString(),
+        },
+        ...prev,
+      ];
+    });
+  }, [user, messProfile]);
+
   // ============================================================================
-  // PART B: LIVE AI & STATISTICAL ANALYTICS ENGINE COMPUTATIONS
+  // PLATE-BASED ANALYTICS ENGINE COMPUTATIONS
   // ============================================================================
   const { forecasts, dataSufficiency } = useMemo(
     () =>
       generateDemandForecasts({
         menus,
         messProfile,
+        attendanceResponses,
         historicalSelections,
         wasteLogs,
         holidaysEvents,
         existingOverrides: forecastOverridesMap,
+        totalRegisteredStudents,
       }),
     [
       menus,
       messProfile,
+      attendanceResponses,
       historicalSelections,
       wasteLogs,
       holidaysEvents,
       forecastOverridesMap,
+      totalRegisteredStudents,
     ]
   );
 
@@ -1079,11 +1130,12 @@ export function DataProvider({ children }) {
       analyzeInventoryIntelligence({
         inventory,
         menus,
+        forecasts,
         expectedAttendance:
-          forecasts[0]?.expected_attendance ||
-          Number(messProfile.registered_students || 0),
+          forecasts[0]?.expected_plates || totalRegisteredStudents,
+        messProfile,
       }),
-    [inventory, menus, forecasts, messProfile.registered_students]
+    [inventory, menus, forecasts, totalRegisteredStudents, messProfile]
   );
 
   const smartRecommendations = useMemo(
@@ -1156,7 +1208,7 @@ export function DataProvider({ children }) {
   };
 
   // ============================================================================
-  // 2. MESS OWNER MENU & DISH MANAGEMENT
+  // 2. WEEKLY MENU & DISH MANAGEMENT (MONDAY–SUNDAY PLANNER)
   // ============================================================================
   const saveMenu = async (menuPayload) => {
     const normalizedMealType = String(
@@ -1164,8 +1216,11 @@ export function DataProvider({ children }) {
     ).toLowerCase();
     const targetMenuDate =
       normalizeDateStr(menuPayload.menu_date) || getTodayDateStr();
+    const weekStartDate = getWeekStartDateStr(targetMenuDate);
+    const dayOfWeek = getDayOfWeekIndex(targetMenuDate);
+    const dayName = getDayOfWeekName(targetMenuDate);
 
-    // Match strictly by (menu_date, meal_type) so a menu for one date never overwrites another date's menu
+    // Match strictly by (menu_date, meal_type)
     const existingIndex = menus.findIndex(
       (m) =>
         normalizeDateStr(m.menu_date) === targetMenuDate &&
@@ -1175,8 +1230,7 @@ export function DataProvider({ children }) {
     let recordId =
       existingIndex >= 0
         ? menus[existingIndex].id
-        : menuPayload.id &&
-          !String(menuPayload.id).startsWith('menu-')
+        : menuPayload.id && !String(menuPayload.id).startsWith('menu-')
         ? menuPayload.id
         : `menu-${normalizedMealType}-${targetMenuDate}`;
 
@@ -1202,28 +1256,50 @@ export function DataProvider({ children }) {
         0
       );
 
-      const { data: upsertedMenu } = await supabase
+      const baseRow = {
+        mess_id: user.messId,
+        menu_date: targetMenuDate,
+        meal_type: normalizedMealType,
+        title:
+          menuPayload.title ||
+          `${dayName} ${
+            normalizedMealType.charAt(0).toUpperCase() +
+            normalizedMealType.slice(1)
+          }`,
+        publish_status: menuPayload.publish_status || 'draft',
+        selection_deadline: menuPayload.selection_deadline || null,
+        notes: menuPayload.notes || '',
+        total_calories: totalCalories,
+        total_protein: totalProtein,
+        total_carbs: totalCarbs,
+        total_fats: totalFats,
+      };
+
+      // Try upserting with 006 weekly columns first; fallback if 006 not yet applied
+      let { data: upsertedMenu, error: upsertErr } = await supabase
         .from('menus')
         .upsert(
           [
             {
-              mess_id: user.messId,
-              menu_date: targetMenuDate,
-              meal_type: normalizedMealType,
-              title: menuPayload.title,
-              publish_status: menuPayload.publish_status || 'draft',
-              selection_deadline: menuPayload.selection_deadline || null,
-              notes: menuPayload.notes || '',
-              total_calories: totalCalories,
-              total_protein: totalProtein,
-              total_carbs: totalCarbs,
-              total_fats: totalFats,
+              ...baseRow,
+              week_start_date: weekStartDate,
+              day_of_week: dayOfWeek,
+              day_name: dayName,
             },
           ],
           { onConflict: 'mess_id,menu_date,meal_type' }
         )
         .select()
         .maybeSingle();
+
+      if (upsertErr) {
+        const retry = await supabase
+          .from('menus')
+          .upsert([baseRow], { onConflict: 'mess_id,menu_date,meal_type' })
+          .select()
+          .maybeSingle();
+        upsertedMenu = retry.data;
+      }
 
       if (upsertedMenu?.id) {
         recordId = upsertedMenu.id;
@@ -1235,6 +1311,9 @@ export function DataProvider({ children }) {
       ...menuPayload,
       id: recordId,
       menu_date: targetMenuDate,
+      week_start_date: weekStartDate,
+      day_of_week: dayOfWeek,
+      day_name: dayName,
       meal_type: normalizedMealType,
       items: currentItems,
     };
@@ -1251,16 +1330,16 @@ export function DataProvider({ children }) {
       return [updatedMenu, ...prev];
     });
 
-    if (menuPayload.publish_status === 'published') {
+    if (menuPayload.publish_status === 'published' && !menuPayload.silentNotify) {
       await addNotification({
-        title: `New Menu Published: ${normalizedMealType.toUpperCase()} (${formatHumanDate(
+        title: `Menu Published: ${normalizedMealType.toUpperCase()} (${formatHumanDate(
           targetMenuDate
         )})`,
         message: `${
-          updatedMenu.title || 'Daily Menu'
+          updatedMenu.title || 'Fixed Mess Menu'
         } for ${formatHumanDate(
           targetMenuDate
-        )} (${targetMenuDate}) is now live! Select your preferred dishes before the deadline. Your meal entitlement remains 100% guaranteed even if you do not submit a selection.`,
+        )} is now live! Default attendance is Attending — mark "I will NOT be coming" before cutoff only if you plan to skip.`,
         notification_type: 'menu_published',
         recipient_role: 'student',
       });
@@ -1270,23 +1349,42 @@ export function DataProvider({ children }) {
   };
 
   const addOrUpdateMenuItem = async (menuId, dish) => {
-    let dishId = dish.id || `dish-${Date.now()}`;
+    let dishId = dish.id || `dish-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`;
     const dishName = dish.name || dish.dish_name || '';
-    const ingredientsArray = Array.isArray(dish.ingredients)
-      ? dish.ingredients
-      : String(dish.ingredients || '')
-          .split(',')
-          .map((s) => s.trim())
-          .filter(Boolean);
+
+    const structuredQuantities = Array.isArray(dish.ingredient_quantities)
+      ? dish.ingredient_quantities
+          .filter((iq) => iq && String(iq.name || '').trim())
+          .map((iq) => ({
+            name: String(iq.name).trim(),
+            quantity_per_plate:
+              iq.quantity_per_plate !== '' &&
+              iq.quantity_per_plate !== null &&
+              iq.quantity_per_plate !== undefined
+                ? Number(iq.quantity_per_plate)
+                : null,
+            unit: ['g', 'ml', 'pieces'].includes(iq.unit) ? iq.unit : 'g',
+          }))
+      : [];
+
+    const ingredientsArray =
+      structuredQuantities.length > 0
+        ? structuredQuantities.map((iq) => iq.name)
+        : Array.isArray(dish.ingredients)
+        ? dish.ingredients
+        : String(dish.ingredients || '')
+            .split(',')
+            .map((s) => s.trim())
+            .filter(Boolean);
 
     if (isSupabaseConfigured && supabase && !isDemoMode && user?.messId) {
-      const payload = {
+      const basePayload = {
         menu_id: menuId,
         mess_id: user.messId,
         name: dishName,
         description: dish.description || '',
         image_url: dish.image_url || '',
-        serving_size: dish.serving_size || '1 Serving',
+        serving_size: dish.serving_size || '1 Standard Plate',
         calories: Number(dish.calories || 0),
         protein: Number(dish.protein || 0),
         carbs: Number(dish.carbs || 0),
@@ -1294,13 +1392,28 @@ export function DataProvider({ children }) {
         ingredients: ingredientsArray,
       };
       if (dish.id && !String(dish.id).startsWith('dish-')) {
-        payload.id = dish.id;
+        basePayload.id = dish.id;
       }
-      const { data: savedDish } = await supabase
+
+      let { data: savedDish, error: dishErr } = await supabase
         .from('menu_items')
-        .upsert([payload])
+        .upsert([
+          {
+            ...basePayload,
+            ingredient_quantities: structuredQuantities,
+          },
+        ])
         .select()
         .maybeSingle();
+
+      if (dishErr) {
+        const retry = await supabase
+          .from('menu_items')
+          .upsert([basePayload])
+          .select()
+          .maybeSingle();
+        savedDish = retry.data;
+      }
 
       if (savedDish?.id) {
         dishId = savedDish.id;
@@ -1312,14 +1425,13 @@ export function DataProvider({ children }) {
       id: dishId,
       name: dishName,
       dish_name: dishName,
+      serving_size: dish.serving_size || '1 Standard Plate',
       calories: Number(dish.calories || 0),
       protein: Number(dish.protein || 0),
       carbs: Number(dish.carbs || 0),
       fats: Number(dish.fats || 0),
       ingredients: ingredientsArray,
-      // Real new dishes start at 0 student selections (never a hardcoded percentage)
-      selected_count: Number(dish.selected_count || 0),
-      per_serving_raw_kg: Number(dish.per_serving_raw_kg || 0.115),
+      ingredient_quantities: structuredQuantities,
     };
 
     setMenus((prev) =>
@@ -1353,144 +1465,224 @@ export function DataProvider({ children }) {
     }
   };
 
+  /**
+   * Weekly Planner Helper: Copy a single day's Breakfast, Lunch, and Dinner menus & dishes to another date.
+   */
+  const duplicateDayMenus = async (sourceDateStr, targetDateStr) => {
+    const cleanSource = normalizeDateStr(sourceDateStr);
+    const cleanTarget = normalizeDateStr(targetDateStr);
+    if (!cleanSource || !cleanTarget || cleanSource === cleanTarget) return 0;
+
+    let copiedCount = 0;
+    for (const mealType of ['breakfast', 'lunch', 'dinner']) {
+      const sourceMenu = menus.find(
+        (m) =>
+          normalizeDateStr(m.menu_date) === cleanSource &&
+          String(m.meal_type || '').toLowerCase() === mealType
+      );
+      if (!sourceMenu || !(sourceMenu.items || []).length) continue;
+
+      const createdMenu = await saveMenu({
+        menu_date: cleanTarget,
+        meal_type: mealType,
+        title: sourceMenu.title,
+        publish_status: 'draft',
+        notes: sourceMenu.notes || '',
+        items: [],
+        silentNotify: true,
+      });
+
+      for (const item of sourceMenu.items || []) {
+        await addOrUpdateMenuItem(createdMenu.id, {
+          ...item,
+          id: `dish-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        });
+      }
+      copiedCount += 1;
+    }
+    return copiedCount;
+  };
+
+  /**
+   * Weekly Planner Helper: Copy Last Week's Menu (Monday–Sunday) into targetWeekStartDateStr as Draft.
+   */
+  const copyLastWeekMenus = async (targetWeekStartDateStr) => {
+    const targetMonday = getWeekStartDateStr(targetWeekStartDateStr);
+    const prevMonday = addDaysToDateStr(targetMonday, -7);
+    let totalSlotsCopied = 0;
+
+    for (let dayOffset = 0; dayOffset < 7; dayOffset += 1) {
+      const srcDate = addDaysToDateStr(prevMonday, dayOffset);
+      const dstDate = addDaysToDateStr(targetMonday, dayOffset);
+      const count = await duplicateDayMenus(srcDate, dstDate);
+      totalSlotsCopied += count;
+    }
+    return totalSlotsCopied;
+  };
+
+  /**
+   * Weekly Planner Helper: Save entire week as Draft or Publish entire week.
+   */
+  const updateWeekMenusPublishStatus = async (
+    weekStartDateStr,
+    publishStatus = 'published'
+  ) => {
+    const weekDays = getWeekDays(weekStartDateStr);
+    const dateSet = new Set(weekDays.map((d) => d.dateStr));
+    const targetMenus = menus.filter((m) =>
+      dateSet.has(normalizeDateStr(m.menu_date))
+    );
+
+    for (const m of targetMenus) {
+      await saveMenu({
+        ...m,
+        publish_status: publishStatus,
+        silentNotify: true,
+      });
+    }
+
+    if (publishStatus === 'published' && targetMenus.length > 0) {
+      await addNotification({
+        title: `Weekly Menu Published (${weekDays[0].shortDate} – ${weekDays[6].shortDate})`,
+        message: `The weekly mess menu for ${weekDays[0].humanDate} to ${weekDays[6].humanDate} is now published! View Today's Menu and This Week's Menu in your dashboard.`,
+        notification_type: 'menu_published',
+        recipient_role: 'student',
+      });
+    }
+
+    return targetMenus.length;
+  };
+
   // ============================================================================
-  // 3. STUDENT MEAL SELECTION & SYNCHRONIZATION WITH MESS OWNER DASHBOARD
+  // 3. PER-MEAL ATTENDANCE POLLS (REPLACES DISH SELECTION)
   // ============================================================================
-  const submitStudentMealSelection = async ({
-    menuId,
+  const submitMealAttendancePoll = async ({
+    mealDate,
+    meal_date,
+    menuDate,
     mealType,
     meal_type,
-    menuDate,
-    meal_date,
-    willAttend = true,
-    will_attend = true,
-    portionPreference = 'regular',
-    selectedDishIds = [],
+    status,
+    willAttend,
+    will_attend,
   }) => {
     const resolvedDate =
-      normalizeDateStr(menuDate || meal_date) || getTodayDateStr();
-    const rawMealType = mealType || meal_type || 'Lunch';
-    const normalizedMealLower = String(rawMealType).toLowerCase();
+      normalizeDateStr(mealDate || meal_date || menuDate) || getTodayDateStr();
+    const normalizedMealLower = String(
+      mealType || meal_type || 'lunch'
+    ).toLowerCase();
     const normalizedMealCap =
       normalizedMealLower.charAt(0).toUpperCase() +
       normalizedMealLower.slice(1);
-    const attending =
-      will_attend !== undefined ? Boolean(will_attend) : Boolean(willAttend);
 
-    // Match strictly by exact menu_date AND meal_type (never fall back to a menu from another date)
-    const targetMenu =
-      menus.find(
-        (m) =>
-          m.id === menuId &&
-          normalizeDateStr(m.menu_date) === resolvedDate
-      ) ||
-      menus.find(
-        (m) =>
-          normalizeDateStr(m.menu_date) === resolvedDate &&
-          String(m.meal_type || '').toLowerCase() === normalizedMealLower
-      ) ||
-      null;
+    const resolvedStatus =
+      status === 'not_coming' ||
+      will_attend === false ||
+      willAttend === false
+        ? 'not_coming'
+        : 'attending';
+    const isAttending = resolvedStatus === 'attending';
 
-    // Enforce: Students can only submit selections on published menus from their own mess for the exact date
-    if (!isDemoMode) {
-      if (!user?.messId) {
-        throw new Error(
-          'Your account is not linked to a mess yet. Please link your mess before submitting meal selections.'
-        );
-      }
-      if (!targetMenu) {
-        throw new Error(
-          `No published ${normalizedMealCap} menu is available for ${formatHumanDate(
-            resolvedDate
-          )} yet.`
-        );
-      }
-      if (
-        String(targetMenu.publish_status || '').toLowerCase() !== 'published'
-      ) {
-        throw new Error(
-          'Draft menus cannot accept student selections. Please wait until the mess owner publishes this menu.'
-        );
-      }
+    // Check poll cutoff window in Asia/Kolkata
+    const pollWindow = computeMealPollWindow(
+      resolvedDate,
+      normalizedMealLower,
+      messProfile
+    );
+    if (pollWindow.isLocked) {
+      throw new Error(
+        `This attendance poll closed at the cutoff time (${pollWindow.closesAtFormatted} IST). Your answer is locked, and your meal entitlement remains 100% active.`
+      );
     }
 
-    const resolvedMenuId =
-      targetMenu?.id || menuId || `${resolvedDate}_${normalizedMealCap}`;
-    const mapKeyDateMeal = `${resolvedDate}_${normalizedMealCap}`;
-    const previousSelection =
-      studentSelectionsMap[mapKeyDateMeal] ||
-      studentSelectionsMap[resolvedMenuId];
-    const previousDishIds =
-      previousSelection?.selectedDishIds ||
-      previousSelection?.selected_dish_ids ||
-      [];
+    if (!isDemoMode && !user?.messId) {
+      throw new Error(
+        'Your account is not linked to a mess yet. Please link your mess before responding to attendance polls.'
+      );
+    }
 
-    const newSelectionRecord = {
-      menu_id: resolvedMenuId,
-      meal_type: normalizedMealCap,
+    const matchingMenu = menus.find(
+      (m) =>
+        normalizeDateStr(m.menu_date) === resolvedDate &&
+        String(m.meal_type || '').toLowerCase() === normalizedMealLower
+    );
+
+    const nowIso = new Date().toISOString();
+    const studentId = user?.id || 'stu-1';
+    const studentName =
+      studentProfile.full_name || user?.fullName || 'Registered Student';
+    const studentRoll =
+      studentProfile.student_roll_id ||
+      studentProfile.roll_number ||
+      user?.studentId ||
+      '2024CS101';
+    const hostelName =
+      studentProfile.hostel_name || user?.hostelName || 'Hostel Block A';
+
+    const newRecord = {
+      id: `poll-${studentId}-${resolvedDate}-${normalizedMealLower}`,
+      mess_id: user?.messId || messProfile.id || 'mess-demo-001',
+      student_id: studentId,
+      menu_id: matchingMenu?.id || null,
+      student_name: studentName,
+      student_roll_id: studentRoll,
+      hostel_name: hostelName,
+      meal_date: resolvedDate,
       menu_date: resolvedDate,
-      will_attend: attending,
-      portion_preference: portionPreference,
-      selected_dish_ids: attending ? selectedDishIds : [],
-      selectedDishIds: attending ? selectedDishIds : [],
+      meal_type: normalizedMealLower,
+      status: resolvedStatus,
+      will_attend: isAttending,
+      opens_at: pollWindow.opensAt.toISOString(),
+      cutoff_at: pollWindow.closesAt.toISOString(),
       entitlement_retained: true,
-      submitted_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
+      responded_at: nowIso,
+      updated_at: nowIso,
     };
 
+    // Update student local map
     setStudentSelectionsMap((prev) => ({
       ...prev,
-      [resolvedMenuId]: newSelectionRecord,
-      [mapKeyDateMeal]: newSelectionRecord,
-      [`${resolvedDate}_${normalizedMealLower}`]: newSelectionRecord,
+      [`${resolvedDate}_${normalizedMealLower}`]: newRecord,
+      [`${resolvedDate}_${normalizedMealCap}`]: newRecord,
+      ...(matchingMenu?.id ? { [matchingMenu.id]: newRecord } : {}),
     }));
 
-    if (targetMenu) {
-      setMenus((prev) =>
-        prev.map((m) => {
-          if (m.id !== targetMenu.id) return m;
-          const updatedItems = (m.items || []).map((dish) => {
-            const wasSelected = previousDishIds.includes(dish.id);
-            const isNowSelected = attending && selectedDishIds.includes(dish.id);
-            let nextCount = Number(dish.selected_count || 0);
-            if (!wasSelected && isNowSelected) nextCount += 1;
-            if (wasSelected && !isNowSelected)
-              nextCount = Math.max(0, nextCount - 1);
-            return { ...dish, selected_count: nextCount };
-          });
-          return { ...m, items: updatedItems };
-        })
+    // Update mess-wide attendanceResponses state
+    setAttendanceResponses((prev) => {
+      const filtered = prev.filter(
+        (r) =>
+          !(
+            r.student_id === studentId &&
+            normalizeDateStr(r.meal_date || r.menu_date) === resolvedDate &&
+            String(r.meal_type || '').toLowerCase() === normalizedMealLower
+          )
       );
+      return [newRecord, ...filtered];
+    });
 
-      const mealField = `${normalizedMealLower}_selected`;
-      setStudents((prev) =>
-        prev.map((stu) =>
-          stu.email === user?.email || stu.profile_id === user?.id
-            ? { ...stu, [mealField]: attending }
-            : stu
-        )
-      );
-
-      const chosenDishes = (targetMenu.items || []).filter((d) =>
-        selectedDishIds.includes(d.id)
-      );
-      const cals = chosenDishes.reduce((s, d) => s + Number(d.calories || 0), 0);
-      const prot = chosenDishes.reduce((s, d) => s + Number(d.protein || 0), 0);
-      const carbs = chosenDishes.reduce((s, d) => s + Number(d.carbs || 0), 0);
-      const fats = chosenDishes.reduce((s, d) => s + Number(d.fats || 0), 0);
+    // Update student meal history with standard plate nutrition
+    if (matchingMenu) {
+      const allItems = matchingMenu.items || [];
+      const cals = allItems.reduce((s, d) => s + Number(d.calories || 0), 0);
+      const prot = allItems.reduce((s, d) => s + Number(d.protein || 0), 0);
+      const carbs = allItems.reduce((s, d) => s + Number(d.carbs || 0), 0);
+      const fats = allItems.reduce((s, d) => s + Number(d.fats || 0), 0);
 
       const historyEntry = {
-        id: `hist-${resolvedMenuId}`,
+        id: `hist-${resolvedDate}-${normalizedMealLower}`,
         meal_date: resolvedDate,
         meal_type: normalizedMealCap,
-        dishes: chosenDishes.map(
-          (d) => `${d.name || d.dish_name} (${d.serving_size})`
+        title: matchingMenu.title || `${normalizedMealCap} Menu`,
+        dishes: allItems.map(
+          (d) => `${d.name || d.dish_name} (${d.serving_size || '1 Plate'})`
         ),
         calories: cals,
         protein: Number(prot.toFixed(1)),
         carbs: Number(carbs.toFixed(1)),
         fats: Number(fats.toFixed(1)),
-        status: attending ? 'Confirmed' : 'Skipped (Entitled)',
+        status: isAttending
+          ? 'Attended (Standard Plate)'
+          : 'Skipped (Marked Not Coming)',
       };
 
       setStudentMealHistory((prev) => {
@@ -1501,51 +1693,61 @@ export function DataProvider({ children }) {
       });
     }
 
+    // Persist to Supabase `meal_attendance_responses` (and mirror to `meal_selections` if matchingMenu exists for backwards compatibility)
     if (
       isSupabaseConfigured &&
       supabase &&
       !isDemoMode &&
       user?.id &&
-      user?.messId &&
-      targetMenu?.id
+      user?.messId
     ) {
-      const { data: selData } = await supabase
-        .from('meal_selections')
+      const { error: pollErr } = await supabase
+        .from('meal_attendance_responses')
         .upsert(
           [
             {
-              menu_id: targetMenu.id,
               mess_id: user.messId,
               student_id: user.id,
-              will_attend: attending,
-              portion_preference: portionPreference,
+              menu_id: matchingMenu?.id || null,
+              meal_date: resolvedDate,
+              meal_type: normalizedMealLower,
+              status: resolvedStatus,
+              will_attend: isAttending,
+              opens_at: pollWindow.opensAt.toISOString(),
+              cutoff_at: pollWindow.closesAt.toISOString(),
+              entitlement_retained: true,
+              responded_at: nowIso,
+              updated_at: nowIso,
+            },
+          ],
+          { onConflict: 'mess_id,student_id,meal_date,meal_type' }
+        );
+
+      // Also keep `meal_selections` in sync if a published menu row exists
+      if (matchingMenu?.id && !String(matchingMenu.id).startsWith('menu-')) {
+        await supabase.from('meal_selections').upsert(
+          [
+            {
+              menu_id: matchingMenu.id,
+              mess_id: user.messId,
+              student_id: user.id,
+              will_attend: isAttending,
+              portion_preference: 'regular',
               entitlement_retained: true,
             },
           ],
           { onConflict: 'menu_id,student_id' }
-        )
-        .select()
-        .maybeSingle();
-
-      if (selData?.id) {
-        await supabase
-          .from('selection_items')
-          .delete()
-          .eq('meal_selection_id', selData.id);
-        if (selectedDishIds.length > 0) {
-          await supabase.from('selection_items').insert(
-            selectedDishIds.map((dishId) => ({
-              meal_selection_id: selData.id,
-              menu_item_id: dishId,
-              selected: true,
-            }))
-          );
-        }
+        );
+      } else if (pollErr) {
+        console.warn('[SmartBite][AttendancePoll] Upsert warning:', pollErr);
       }
     }
 
-    return newSelectionRecord;
+    return newRecord;
   };
+
+  // Alias for backward compatibility
+  const submitStudentMealSelection = submitMealAttendancePoll;
 
   // ============================================================================
   // 4. STUDENT FEEDBACK SUBMISSION & OWNER REPLY
@@ -1678,9 +1880,9 @@ export function DataProvider({ children }) {
   };
 
   // ============================================================================
-  // 5. FORECAST OVERRIDES, ACTUAL OUTCOMES & HOLIDAYS/EVENTS
+  // 5. PLATE FORECAST OVERRIDES, ACTUAL OUTCOMES & HOLIDAYS/EVENTS
   // ============================================================================
-  const overrideForecast = async (forecastId, overriddenPrepKg, reason) => {
+  const overrideForecast = async (forecastId, overriddenPrepPlates, reason) => {
     const target = forecasts.find((f) => f.id === forecastId);
     const key = target ? target.override_key : forecastId;
 
@@ -1688,23 +1890,42 @@ export function DataProvider({ children }) {
       ...prev,
       [key]: {
         ...(prev[key] || {}),
-        overridden_prep_kg: Number(overriddenPrepKg),
-        reason: reason || 'Chef manual adjustment',
+        overridden_prep_plates: Math.round(Number(overriddenPrepPlates)),
+        reason: reason || 'Chef manual plate adjustment',
       },
     }));
   };
 
-  const recordActualForecastOutcome = async (forecastId, actualKg) => {
+  const recordActualForecastOutcome = async (forecastId, actualServedPlates) => {
     const target = forecasts.find((f) => f.id === forecastId);
     const key = target ? target.override_key : forecastId;
+    const servedNum = Math.round(Number(actualServedPlates));
 
     setForecastOverridesMap((prev) => ({
       ...prev,
       [key]: {
         ...(prev[key] || {}),
-        actual_outcome_kg: Number(actualKg),
+        actual_served_plates: servedNum,
       },
     }));
+
+    // Also append to historicalSelections so future forecasts calibrate with this outcome
+    if (target) {
+      setHistoricalSelections((prev) => [
+        ...prev,
+        {
+          date: target.forecast_date,
+          registered: target.enrolled_students,
+          actualServedPlates: servedNum,
+          breakfastSelected:
+            target.meal_type === 'breakfast' ? servedNum : target.expected_plates,
+          lunchSelected:
+            target.meal_type === 'lunch' ? servedNum : target.expected_plates,
+          dinnerSelected:
+            target.meal_type === 'dinner' ? servedNum : target.expected_plates,
+        },
+      ]);
+    }
   };
 
   const addHolidayEvent = async ({
@@ -1732,31 +1953,37 @@ export function DataProvider({ children }) {
   };
 
   // ============================================================================
-  // 6. FOOD WASTE LOGGING & INVENTORY MANAGEMENT
+  // 6. PLATE-BASED FOOD WASTE LOGGING & INVENTORY MANAGEMENT
   // ============================================================================
   const addFoodWasteLog = async (payload) => {
-    const preparedKg = Number(payload.prepared_kg || 0);
-    const consumedKg = Number(payload.consumed_kg || 0);
-    const leftoverKg =
-      payload.leftover_kg !== undefined && payload.leftover_kg !== ''
-        ? Number(payload.leftover_kg)
-        : Math.max(0, Number((preparedKg - consumedKg).toFixed(2)));
-    const unitCost = Number(payload.unit_cost_inr || 140);
-    const totalWasteCost = Number((leftoverKg * unitCost).toFixed(2));
+    const platesPrepared = Math.round(
+      Number(payload.plates_prepared ?? payload.prepared_kg ?? 0)
+    );
+    const platesServed = Math.round(
+      Number(payload.plates_served ?? payload.consumed_kg ?? 0)
+    );
+    const leftoverPlates =
+      payload.leftover_plates !== undefined && payload.leftover_plates !== ''
+        ? Math.round(Number(payload.leftover_plates))
+        : Math.max(0, platesPrepared - platesServed);
+    const costPerPlate = Number(
+      payload.cost_per_plate ?? payload.unit_cost_inr ?? messProfile.cost_per_plate ?? 65
+    );
+    const totalWasteCost = Number((leftoverPlates * costPerPlate).toFixed(2));
     const wastePct =
-      preparedKg > 0
-        ? Number(((leftoverKg / preparedKg) * 100).toFixed(2))
+      platesPrepared > 0
+        ? Number(((leftoverPlates / platesPrepared) * 100).toFixed(2))
         : 0;
 
     const newLog = {
       id: 'waste-' + Date.now(),
-      log_date: payload.log_date || new Date().toISOString().split('T')[0],
+      log_date: payload.log_date || getTodayDateStr(),
       meal_type: String(payload.meal_type || 'lunch').toLowerCase(),
-      dish_name: payload.dish_name || 'Full Meal Batch',
-      prepared_kg: preparedKg,
-      consumed_kg: consumedKg,
-      leftover_kg: leftoverKg,
-      unit_cost_inr: unitCost,
+      dish_name: payload.dish_name || 'Standard Meal Thali',
+      plates_prepared: platesPrepared,
+      plates_served: platesServed,
+      leftover_plates: leftoverPlates,
+      cost_per_plate: costPerPlate,
       cost: totalWasteCost,
       waste_percentage: wastePct,
       notes: payload.notes || '',
@@ -1771,10 +1998,12 @@ export function DataProvider({ children }) {
           idx === existingIdx
             ? {
                 ...d,
-                preparedKg: Number((d.preparedKg + preparedKg).toFixed(1)),
-                consumedKg: Number((d.consumedKg + consumedKg).toFixed(1)),
-                wasteKg: Number((d.wasteKg + leftoverKg).toFixed(1)),
-                wasteCostInr: Math.round(d.wasteCostInr + totalWasteCost),
+                platesPrepared: Number(d.platesPrepared || 0) + platesPrepared,
+                platesServed: Number(d.platesServed || 0) + platesServed,
+                leftoverPlates: Number(d.leftoverPlates || 0) + leftoverPlates,
+                wasteCostInr: Math.round(
+                  Number(d.wasteCostInr || 0) + totalWasteCost
+                ),
               }
             : d
         );
@@ -1783,31 +2012,41 @@ export function DataProvider({ children }) {
         ...prev,
         {
           day: newLog.log_date,
-          preparedKg,
-          consumedKg,
-          wasteKg: leftoverKg,
-          traditionalWasteKg: 0,
+          platesPrepared,
+          platesServed,
+          leftoverPlates,
+          traditionalWastePlates: 0,
           wasteCostInr: Math.round(totalWasteCost),
         },
       ].slice(-7);
     });
 
     if (isSupabaseConfigured && supabase && !isDemoMode && user?.messId) {
-      await supabase.from('food_waste_logs').insert([
+      const baseInsert = {
+        mess_id: user.messId,
+        log_date: newLog.log_date,
+        meal_type: newLog.meal_type,
+        dish_name: newLog.dish_name,
+        prepared_kg: platesPrepared,
+        consumed_kg: platesServed,
+        leftover_kg: leftoverPlates,
+        unit_cost_inr: costPerPlate,
+        cost: newLog.cost,
+        waste_percentage: newLog.waste_percentage,
+        notes: newLog.notes,
+      };
+      const { error: wasteErr } = await supabase.from('food_waste_logs').insert([
         {
-          mess_id: user.messId,
-          log_date: newLog.log_date,
-          meal_type: newLog.meal_type,
-          dish_name: newLog.dish_name,
-          prepared_kg: newLog.prepared_kg,
-          consumed_kg: newLog.consumed_kg,
-          leftover_kg: newLog.leftover_kg,
-          unit_cost_inr: newLog.unit_cost_inr,
-          cost: newLog.cost,
-          waste_percentage: newLog.waste_percentage,
-          notes: newLog.notes,
+          ...baseInsert,
+          plates_prepared: platesPrepared,
+          plates_served: platesServed,
+          leftover_plates: leftoverPlates,
+          cost_per_plate: costPerPlate,
         },
       ]);
+      if (wasteErr) {
+        await supabase.from('food_waste_logs').insert([baseInsert]);
+      }
     }
 
     return newLog;
@@ -1815,6 +2054,20 @@ export function DataProvider({ children }) {
 
   const addInventoryItem = async (itemPayload) => {
     let recordId = 'inv-' + Date.now();
+    const qtyPerPlate =
+      itemPayload.quantity_per_plate !== undefined &&
+      itemPayload.quantity_per_plate !== '' &&
+      Number(itemPayload.quantity_per_plate) > 0
+        ? Number(itemPayload.quantity_per_plate)
+        : null;
+    const plateUnit = ['g', 'ml', 'pieces'].includes(itemPayload.plate_unit)
+      ? itemPayload.plate_unit
+      : itemPayload.unit === 'L'
+      ? 'ml'
+      : itemPayload.unit === 'pieces'
+      ? 'pieces'
+      : 'g';
+
     const newItem = {
       id: recordId,
       ingredient_name: itemPayload.ingredient_name,
@@ -1823,28 +2076,44 @@ export function DataProvider({ children }) {
       minimum_stock: Number(itemPayload.minimum_stock || 10),
       unit: itemPayload.unit || 'kg',
       unit_price: Number(itemPayload.unit_price || 60),
+      quantity_per_plate: qtyPerPlate,
+      plate_unit: plateUnit,
       expiry_date: itemPayload.expiry_date || null,
       supplier_name: itemPayload.supplier_name || 'Vendor',
     };
 
     if (isSupabaseConfigured && supabase && !isDemoMode && user?.messId) {
-      const { data: inserted } = await supabase
+      const baseInv = {
+        mess_id: user.messId,
+        ingredient_name: newItem.ingredient_name,
+        category: newItem.category,
+        current_stock: newItem.current_stock,
+        minimum_stock: newItem.minimum_stock,
+        unit: newItem.unit,
+        unit_price: newItem.unit_price,
+        expiry_date: newItem.expiry_date || null,
+        supplier_name: newItem.supplier_name,
+      };
+      let { data: inserted, error: invErr } = await supabase
         .from('inventory_items')
         .insert([
           {
-            mess_id: user.messId,
-            ingredient_name: newItem.ingredient_name,
-            category: newItem.category,
-            current_stock: newItem.current_stock,
-            minimum_stock: newItem.minimum_stock,
-            unit: newItem.unit,
-            unit_price: newItem.unit_price,
-            expiry_date: newItem.expiry_date || null,
-            supplier_name: newItem.supplier_name,
+            ...baseInv,
+            quantity_per_plate: qtyPerPlate,
+            plate_unit: plateUnit,
           },
         ])
         .select()
         .maybeSingle();
+
+      if (invErr) {
+        const retry = await supabase
+          .from('inventory_items')
+          .insert([baseInv])
+          .select()
+          .maybeSingle();
+        inserted = retry.data;
+      }
 
       if (inserted?.id) {
         newItem.id = inserted.id;
@@ -1863,6 +2132,78 @@ export function DataProvider({ children }) {
     }
 
     return newItem;
+  };
+
+  const updateInventoryPlateQuantity = async (
+    itemId,
+    quantityPerPlate,
+    plateUnit = 'g',
+    ingredientName = ''
+  ) => {
+    const qtyNum = Number(quantityPerPlate);
+    if (!qtyNum || qtyNum <= 0) return;
+
+    // Update inventory item if it exists in inventory
+    setInventory((prev) =>
+      prev.map((inv) =>
+        inv.id === itemId ||
+        (ingredientName &&
+          String(inv.ingredient_name || '').toLowerCase() ===
+            String(ingredientName).toLowerCase())
+          ? { ...inv, quantity_per_plate: qtyNum, plate_unit: plateUnit }
+          : inv
+      )
+    );
+
+    // Also update any matching dish ingredient_quantities in menus
+    if (ingredientName) {
+      const targetLower = ingredientName.trim().toLowerCase();
+      setMenus((prev) =>
+        prev.map((m) => ({
+          ...m,
+          items: (m.items || []).map((d) => {
+            const existingStructured = Array.isArray(d.ingredient_quantities)
+              ? d.ingredient_quantities
+              : [];
+            const updatedStructured = existingStructured.some(
+              (iq) => String(iq.name || '').trim().toLowerCase() === targetLower
+            )
+              ? existingStructured.map((iq) =>
+                  String(iq.name || '').trim().toLowerCase() === targetLower
+                    ? { ...iq, quantity_per_plate: qtyNum, unit: plateUnit }
+                    : iq
+                )
+              : (d.ingredients || []).some(
+                  (ing) => String(ing || '').trim().toLowerCase() === targetLower
+                )
+              ? [
+                  ...existingStructured,
+                  {
+                    name: ingredientName.trim(),
+                    quantity_per_plate: qtyNum,
+                    unit: plateUnit,
+                  },
+                ]
+              : existingStructured;
+            return { ...d, ingredient_quantities: updatedStructured };
+          }),
+        }))
+      );
+    }
+
+    if (
+      isSupabaseConfigured &&
+      supabase &&
+      !isDemoMode &&
+      itemId &&
+      !String(itemId).startsWith('menu-ing-') &&
+      !String(itemId).startsWith('inv-')
+    ) {
+      await supabase
+        .from('inventory_items')
+        .update({ quantity_per_plate: qtyNum, plate_unit: plateUnit })
+        .eq('id', itemId);
+    }
   };
 
   const recordInventoryTransaction = async ({
@@ -1899,7 +2240,7 @@ export function DataProvider({ children }) {
         (transaction_type === 'purchase'
           ? 'Stock Restock Purchase'
           : 'Kitchen Batch Consumption'),
-      transaction_date: new Date().toISOString().split('T')[0],
+      transaction_date: getTodayDateStr(),
     };
 
     setInventoryTransactions((prev) => [txRecord, ...prev]);
@@ -1945,24 +2286,65 @@ export function DataProvider({ children }) {
       mess_name: updates.name || messProfile.name,
       capacity: Number(updates.capacity ?? messProfile.capacity ?? 0),
       registered_students: liveStudentCount,
+      default_cutoff_hours: Number(
+        updates.default_cutoff_hours ??
+          updates.cutoff_hours ??
+          messProfile.default_cutoff_hours ??
+          2
+      ),
+      cutoff_hours: Number(
+        updates.cutoff_hours ??
+          updates.default_cutoff_hours ??
+          messProfile.cutoff_hours ??
+          2
+      ),
+      walk_in_buffer_pct: Number(
+        updates.walk_in_buffer_pct ??
+          updates.guest_buffer_pct ??
+          messProfile.walk_in_buffer_pct ??
+          5
+      ),
+      guest_buffer_pct: Number(
+        updates.guest_buffer_pct ??
+          updates.walk_in_buffer_pct ??
+          messProfile.guest_buffer_pct ??
+          5
+      ),
+      safety_buffer_pct: Number(
+        updates.safety_buffer_pct ?? messProfile.safety_buffer_pct ?? 5
+      ),
+      cost_per_plate: Number(
+        updates.cost_per_plate ?? messProfile.cost_per_plate ?? 65
+      ),
     };
     setMessProfile(merged);
     if (isSupabaseConfigured && supabase && !isDemoMode && user?.messId) {
-      await supabase
+      const baseUpdate = {
+        name: merged.name,
+        college_name: merged.college_name,
+        hostel_name: merged.hostel_name,
+        contact_number: merged.contact_number,
+        capacity: Number(merged.capacity || 0),
+        breakfast_time: merged.breakfast_time,
+        lunch_time: merged.lunch_time,
+        dinner_time: merged.dinner_time,
+        default_cutoff_hours: Number(merged.default_cutoff_hours || 2),
+        walk_in_buffer_pct: Number(merged.walk_in_buffer_pct || 5),
+      };
+      const { error: profErr } = await supabase
         .from('messes')
         .update({
-          name: merged.name,
-          college_name: merged.college_name,
-          hostel_name: merged.hostel_name,
-          contact_number: merged.contact_number,
-          capacity: Number(merged.capacity || 0),
-          breakfast_time: merged.breakfast_time,
-          lunch_time: merged.lunch_time,
-          dinner_time: merged.dinner_time,
-          default_cutoff_hours: Number(merged.default_cutoff_hours || 4),
-          walk_in_buffer_pct: Number(merged.walk_in_buffer_pct || 8),
+          ...baseUpdate,
+          cutoff_hours: Number(merged.cutoff_hours || 2),
+          guest_buffer_pct: Number(merged.guest_buffer_pct || 5),
+          safety_buffer_pct: Number(merged.safety_buffer_pct || 5),
+          cost_per_plate: Number(merged.cost_per_plate || 65),
         })
         .eq('id', user.messId);
+
+      if (profErr) {
+        await supabase.from('messes').update(baseUpdate).eq('id', user.messId);
+      }
     }
     return merged;
   };
@@ -1983,7 +2365,7 @@ export function DataProvider({ children }) {
   };
 
   // ============================================================================
-  // 7. SUPER ADMIN GOVERNANCE ACTIONS (PART C)
+  // 7. SUPER ADMIN GOVERNANCE ACTIONS
   // ============================================================================
   const addOrUpdateCollege = async (collegePayload) => {
     const id = collegePayload.id || 'col-' + Date.now();
@@ -2135,7 +2517,7 @@ export function DataProvider({ children }) {
       amount_inr: Number(paymentPayload.amount_inr || 0),
       payment_method: paymentPayload.payment_method || 'Institutional NEFT',
       payment_status: paymentPayload.payment_status || 'succeeded',
-      paid_at: new Date().toISOString().split('T')[0],
+      paid_at: getTodayDateStr(),
     };
     setPaymentRecords((prev) => [newPay, ...prev]);
     return newPay;
@@ -2150,20 +2532,6 @@ export function DataProvider({ children }) {
     }
   };
 
-  // Shared student list and registered count used by both Overview and Student Selections tabs
-  const messStudents = useMemo(() => {
-    if (isDemoMode) return students;
-    if (!user?.messId) return [];
-    return students.filter((s) => s.mess_id === user.messId);
-  }, [isDemoMode, students, user?.messId]);
-
-  const totalRegisteredStudents = useMemo(() => {
-    if (isDemoMode) {
-      return Number(messProfile.registered_students || messStudents.length || 0);
-    }
-    return messStudents.length;
-  }, [isDemoMode, messProfile.registered_students, messStudents.length]);
-
   return (
     <DataContext.Provider
       value={{
@@ -2176,7 +2544,8 @@ export function DataProvider({ children }) {
         students,
         messStudents,
         totalRegisteredStudents,
-        mealSelectionsRows,
+        attendanceResponses,
+        mealSelectionsRows: attendanceResponses,
         historicalSelections,
         forecasts,
         dataSufficiency,
@@ -2206,16 +2575,21 @@ export function DataProvider({ children }) {
         saveMenu,
         addOrUpdateMenuItem,
         deleteMenuItem,
+        duplicateDayMenus,
+        copyLastWeekMenus,
+        updateWeekMenusPublishStatus,
         overrideForecast,
         recordActualForecastOutcome,
         addHolidayEvent,
         addFoodWasteLog,
         addInventoryItem,
+        updateInventoryPlateQuantity,
         recordInventoryTransaction,
         updateFeedbackStatus,
         updateMessProfile,
         regenerateMessJoinCode,
         // Student Actions
+        submitMealAttendancePoll,
         submitStudentMealSelection,
         submitStudentFeedback,
         updateStudentProfile,

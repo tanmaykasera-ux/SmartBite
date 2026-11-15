@@ -39,7 +39,6 @@ export function WasteReductionAreaChart() {
             axisLine={false}
             tickLine={false}
             tick={{ fill: '#64748b', fontSize: 12 }}
-            unit=" kg"
           />
           <Tooltip
             contentStyle={{
@@ -53,8 +52,8 @@ export function WasteReductionAreaChart() {
           <Legend wrapperStyle={{ fontSize: '12px', paddingTop: '10px' }} />
           <Area
             type="monotone"
-            dataKey="traditionalPreparedKg"
-            name="Unassisted Prep (kg)"
+            dataKey="traditionalPreparedPlates"
+            name="Unassisted Prep (plates)"
             stroke="#94a3b8"
             strokeWidth={2}
             strokeDasharray="4 4"
@@ -63,8 +62,8 @@ export function WasteReductionAreaChart() {
           />
           <Area
             type="monotone"
-            dataKey="smartBitePreparedKg"
-            name="SmartBite AI Prep (kg)"
+            dataKey="smartBitePreparedPlates"
+            name="SmartBite Guided Prep (plates)"
             stroke="#1f5440"
             strokeWidth={2.5}
             fillOpacity={1}
@@ -72,8 +71,8 @@ export function WasteReductionAreaChart() {
           />
           <Area
             type="monotone"
-            dataKey="actualConsumedKg"
-            name="Actual Student Consumption (kg)"
+            dataKey="actualServedPlates"
+            name="Actual Plates Served"
             stroke="#418c6e"
             strokeWidth={2}
             fill="none"
@@ -107,22 +106,22 @@ export function MealDemandBarChart() {
           />
           <Legend wrapperStyle={{ fontSize: '12px', paddingTop: '10px' }} />
           <Bar
-            dataKey="optedIn"
-            name="Pre-Selected Attending"
+            dataKey="attendingDefault"
+            name="Attending (Default)"
             stackId="a"
             fill="#1f5440"
             radius={[0, 0, 4, 4]}
           />
           <Bar
-            dataKey="noResponseBuffer"
-            name="Walk-In Entitlement Buffer"
+            dataKey="guestBuffer"
+            name="Guest & Safety Buffer (plates)"
             stackId="a"
             fill="#64a88b"
             radius={[6, 6, 0, 0]}
           />
           <Bar
-            dataKey="optedOut"
-            name="Indicated Skipping (Saved Prep)"
+            dataKey="markedNotComing"
+            name="Marked Not Coming (Saved Plates)"
             fill="#e2dfd5"
             radius={[6, 6, 0, 0]}
           />

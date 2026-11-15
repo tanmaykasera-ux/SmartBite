@@ -1,298 +1,271 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState } from 'react';
 import {
   FileSpreadsheet,
   Download,
-  Printer,
   Calendar,
-  CheckCircle2,
   TrendingDown,
+  Users,
+  Package,
+  CheckCircle2,
 } from 'lucide-react';
+import { useData } from '../../context/DataContext';
 import Card from '../common/Card';
 import Badge from '../common/Badge';
 import Button from '../common/Button';
-import { useData } from '../../context/DataContext';
 
-export default function ReportsTab({ onNavigateTab }) {
-  const { messProfile, wasteLogs, weeklySeries, inventory, feedbackList } =
-    useData();
-  const [period, setPeriod] = useState('weekly'); // daily | weekly | monthly
-  const [exportedBanner, setExportedBanner] = useState('');
+export default function ReportsTab() {
+  const {
+    messProfile,
+    wasteLogs,
+    wasteAnalytics,
+    forecasts,
+    inventoryIntelligence,
+    historicalSelections,
+  } = useData();
+  const [downloadedReport, setDownloadedReport] = useState('');
 
-  const periodLabel =
-    period === 'daily'
-      ? 'Daily Operational Report (Today)'
-      : period === 'weekly'
-      ? 'Weekly Executive Summary (Last 7 Days)'
-      : 'Monthly Institutional Audit Report (Last 30 Days)';
+  const triggerDownload = (filename, headers, rows) => {
+    const csvContent =
+      'data:text/csv;charset=utf-8,' +
+      [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', filename);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
 
-  // Filter real waste logs by period
-  const filteredWasteLogs = useMemo(() => {
-    const now = Date.now();
-    const todayStr = new Date().toISOString().split('T')[0];
-    return wasteLogs.filter((log) => {
-      if (!log.log_date) return true;
-      if (period === 'daily') return log.log_date === todayStr;
-      const daysDiff = (now - new Date(log.log_date).getTime()) / 86400000;
-      if (period === 'weekly') return daysDiff <= 7;
-      return daysDiff <= 30;
-    });
-  }, [wasteLogs, period]);
-
-  const activeLogs =
-    filteredWasteLogs.length > 0 ? filteredWasteLogs : wasteLogs;
-
-  const preparedKg = Number(
-    activeLogs
-      .reduce((sum, l) => sum + Number(l.prepared_kg || 0), 0)
-      .toFixed(1)
-  );
-  const consumedKg = Number(
-    activeLogs
-      .reduce((sum, l) => sum + Number(l.consumed_kg || 0), 0)
-      .toFixed(1)
-  );
-  const wasteKg = Number(
-    activeLogs
-      .reduce((sum, l) => sum + Number(l.leftover_kg || 0), 0)
-      .toFixed(1)
-  );
-  const wasteCostInr = Math.round(
-    activeLogs.reduce((sum, l) => sum + Number(l.cost || 0), 0)
-  );
-
-  const avgSatisfaction =
-    feedbackList.length > 0
-      ? `${(
-          feedbackList.reduce((s, f) => s + Number(f.rating || 0), 0) /
-          feedbackList.length
-        ).toFixed(1)} / 5.0`
-      : 'No ratings yet';
-
-  const reportMetrics = {
-    preparedKg,
-    consumedKg,
-    wasteKg,
-    wasteCostInr,
-    avgSatisfaction,
-    entitlementCompliance: '100% (Zero Denials)',
+    setDownloadedReport(filename);
+    setTimeout(() => setDownloadedReport(''), 3500);
   };
 
-  const handleDownloadCSV = () => {
-    const rows = [
-      ['SmartBite Institutional Report', periodLabel],
-      ['Mess Name', messProfile.name || ''],
-      ['College / Institution', messProfile.college_name || ''],
-      ['Registered Students', messProfile.registered_students || 0],
-      ['Total Prepared (kg)', reportMetrics.preparedKg],
-      ['Total Consumed (kg)', reportMetrics.consumedKg],
-      ['Total Leftover Waste (kg)', reportMetrics.wasteKg],
-      ['Estimated Waste Cost (INR)', reportMetrics.wasteCostInr],
-      ['Student Meal Entitlement Guarantee', reportMetrics.entitlementCompliance],
-      [],
-      ['Day', 'Prepared (kg)', 'Consumed (kg)', 'Waste (kg)', 'Waste Cost (INR)'],
-      ...weeklySeries.map((d) => [
-        d.day,
-        d.preparedKg,
-        d.consumedKg,
-        d.wasteKg,
-        d.wasteCostInr,
-      ]),
+  const exportDailyWasteReport = () => {
+    const headers = [
+      'Date',
+      'Meal Type',
+      'Meal Batch',
+      'Plates Prepared',
+      'Plates Served',
+      'Leftover Plates',
+      'Cost Per Plate (INR)',
+      'Waste %',
+      'Waste Cost (INR)',
+      'Notes',
     ];
-
-    const csvString = rows.map((r) => r.join(',')).join('\n');
-    const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `SmartBite_${period.toUpperCase()}_Report_${new Date().toISOString().split('T')[0]}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-    setExportedBanner(`Downloaded ${periodLabel} as CSV file.`);
+    const rows = wasteLogs.map((w) => [
+      w.log_date,
+      w.meal_type,
+      `"${w.dish_name}"`,
+      Math.round(Number(w.plates_prepared ?? w.prepared_kg ?? 0)),
+      Math.round(Number(w.plates_served ?? w.consumed_kg ?? 0)),
+      Math.round(Number(w.leftover_plates ?? w.leftover_kg ?? 0)),
+      Number(w.cost_per_plate ?? w.unit_cost_inr ?? 65),
+      w.waste_percentage,
+      w.cost,
+      `"${w.notes || ''}"`,
+    ]);
+    triggerDownload(
+      `SmartBite_Daily_Plate_Waste_Report_${new Date().toISOString().split('T')[0]}.csv`,
+      headers,
+      rows
+    );
   };
 
-  const handlePrintReport = () => {
-    window.print();
+  const exportWeeklyForecastReport = () => {
+    const headers = [
+      'Date',
+      'Day',
+      'Meal Type',
+      'Menu Title',
+      'Enrolled Students',
+      'Marked Not Coming (Poll)',
+      'Estimated Silent No-Shows',
+      'Guest Buffer Plates',
+      'Expected Plates',
+      'Recommended Prep Plates',
+      'Confidence Range',
+    ];
+    const rows = forecasts.map((f) => [
+      f.forecast_date,
+      f.day_name || '',
+      f.meal_type,
+      `"${f.menu_title}"`,
+      f.enrolled_students,
+      f.not_coming_count,
+      f.insufficient_data ? '"Insufficient data"' : f.silent_no_shows_est,
+      f.guest_buffer_plates,
+      f.expected_plates,
+      f.overridden_prep_plates ?? f.recommended_prep_plates,
+      `"${f.confidence_range_label}"`,
+    ]);
+    triggerDownload(
+      `SmartBite_Weekly_Plate_Forecast_Report_${new Date().toISOString().split('T')[0]}.csv`,
+      headers,
+      rows
+    );
   };
+
+  const exportMonthlyExecutiveReport = () => {
+    const headers = [
+      'Day / Period',
+      'Enrolled Students',
+      'Breakfast Plates Served',
+      'Lunch Plates Served',
+      'Dinner Plates Served',
+      'Guest / Walk-In Plates',
+    ];
+    const rows = historicalSelections.map((h) => [
+      h.date,
+      h.registered,
+      h.breakfastSelected,
+      h.lunchSelected,
+      h.dinnerSelected,
+      h.unpolledWalkIns,
+    ]);
+    triggerDownload(
+      `SmartBite_Monthly_Plate_Attendance_Summary_${new Date().toISOString().split('T')[0]}.csv`,
+      headers,
+      rows
+    );
+  };
+
+  const exportInventoryProcurementReport = () => {
+    const headers = [
+      'Ingredient',
+      'Category',
+      'Current Stock',
+      'Min Stock',
+      'Unit',
+      'Quantity Per Plate',
+      'Weekly Requirement',
+      'Recommended Purchase',
+      'Unit Cost (INR)',
+      'Supplier',
+    ];
+    const rows = inventoryIntelligence.enrichedInventory.map((i) => [
+      `"${i.ingredient_name}"`,
+      `"${i.category}"`,
+      i.current_stock,
+      i.minimum_stock,
+      i.unit,
+      i.missingQuantityPerPlate
+        ? '"Add quantity per plate"'
+        : `"${i.quantity_per_plate} ${i.plate_unit}"`,
+      i.weeklyProjectedDemand,
+      i.recommendedPurchaseQty,
+      i.unit_price,
+      `"${i.supplier_name || ''}"`,
+    ]);
+    triggerDownload(
+      `SmartBite_Inventory_Procurement_Report_${new Date().toISOString().split('T')[0]}.csv`,
+      headers,
+      rows
+    );
+  };
+
+  const reportCards = [
+    {
+      title: 'Daily Kitchen Plate Prep & Leftover Report',
+      subtitle: 'Meal-wise plates prepared, plates served, leftover plates & waste cost',
+      icon: TrendingDown,
+      metrics: `${wasteLogs.length} logged batches • ${wasteAnalytics.overallWastePct}% leftover rate`,
+      action: exportDailyWasteReport,
+      btnText: 'Download Daily Plate CSV',
+    },
+    {
+      title: 'Weekly Attendance Poll & Plate Forecast Report',
+      subtitle: 'Enrolled students, "Not Coming" poll counts, buffers & recommended plates',
+      icon: Users,
+      metrics: `${forecasts.length} meal forecasts • ${messProfile.registered_students} enrolled students`,
+      action: exportWeeklyForecastReport,
+      btnText: 'Download Weekly Forecast CSV',
+    },
+    {
+      title: 'Monthly Institutional Plate Attendance Summary',
+      subtitle: 'Consolidated Breakfast, Lunch & Dinner plates served across the hostel',
+      icon: Calendar,
+      metrics: `Institution: ${messProfile.college_name || messProfile.name}`,
+      action: exportMonthlyExecutiveReport,
+      btnText: 'Download Monthly Summary CSV',
+    },
+    {
+      title: 'Inventory & Plate-Derived Purchase Report',
+      subtitle: 'Current ingredient stock (kg/L/pieces), per-plate quantities & purchase orders',
+      icon: Package,
+      metrics: `${inventoryIntelligence.enrichedInventory.length} items • ₹${inventoryIntelligence.totalProcurementBudgetInr.toLocaleString('en-IN')} est. order`,
+      action: exportInventoryProcurementReport,
+      btnText: 'Download Inventory CSV',
+    },
+  ];
 
   return (
     <div className="space-y-6">
-      {/* Report Period Selector & Export Controls */}
-      <Card className="p-5 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-        <div>
-          <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-            <FileSpreadsheet className="w-5 h-5 text-brand-700" />
-            Institutional Reports &amp; Audit Generator
-          </h2>
-          <p className="text-xs text-slate-500">
-            Generate Daily, Weekly, and Monthly operational, waste, financial, and nutrition reports from your recorded data
-          </p>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="inline-flex rounded-xl bg-cream-100 p-1 border border-slate-200 text-xs">
-            {[
-              { id: 'daily', label: 'Daily Report' },
-              { id: 'weekly', label: 'Weekly Report' },
-              { id: 'monthly', label: 'Monthly Report' },
-            ].map((tab) => (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => setPeriod(tab.id)}
-                className={`px-3.5 py-1.5 rounded-lg font-bold transition-all ${
-                  period === tab.id
-                    ? 'bg-brand-800 text-white shadow-sm'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
-
-          <Button
-            variant="secondary"
-            size="sm"
-            icon={Printer}
-            iconPosition="left"
-            onClick={handlePrintReport}
-          >
-            Print / PDF
-          </Button>
-          <Button
-            variant="primary"
-            size="sm"
-            icon={Download}
-            iconPosition="left"
-            onClick={handleDownloadCSV}
-          >
-            Export CSV
-          </Button>
-        </div>
-      </Card>
-
-      {exportedBanner && (
-        <div className="p-3.5 rounded-xl bg-brand-50 border border-brand-200 text-xs font-semibold text-brand-900 flex items-center gap-2">
-          <CheckCircle2 className="w-4 h-4 text-brand-700 shrink-0" />
-          <span>{exportedBanner}</span>
+      {downloadedReport && (
+        <div className="p-4 rounded-xl bg-brand-900 text-white text-xs font-semibold flex items-center gap-2 shadow-lg">
+          <CheckCircle2 className="w-4 h-4 text-brand-300" />
+          <span>Exported CSV report: {downloadedReport}</span>
         </div>
       )}
 
-      {/* Executive Summary Sheet */}
-      <Card className="p-6 space-y-6">
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-4">
-          <div>
-            <Badge variant="green" icon={Calendar}>
-              {periodLabel}
-            </Badge>
-            <h3 className="text-xl font-extrabold text-slate-900 mt-2">
-              {messProfile.name || 'Institutional Mess'} —{' '}
-              {messProfile.college_name || 'Campus'}
-            </h3>
-          </div>
-          <div className="text-right text-xs text-slate-500">
-            <p>Generated on: {new Date().toISOString().split('T')[0]}</p>
-            <p className="font-semibold text-brand-800">
-              Entitlement Compliance: {reportMetrics.entitlementCompliance}
-            </p>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="p-4 rounded-xl bg-cream-50 border border-slate-200">
-            <p className="text-xs text-slate-500">Total Food Prepared</p>
-            <p className="text-xl font-extrabold text-slate-900 mt-1">
-              {reportMetrics.preparedKg.toLocaleString()} kg
-            </p>
-          </div>
-          <div className="p-4 rounded-xl bg-cream-50 border border-slate-200">
-            <p className="text-xs text-slate-500">Total Food Consumed</p>
-            <p className="text-xl font-extrabold text-brand-800 mt-1">
-              {reportMetrics.consumedKg.toLocaleString()} kg
-            </p>
-          </div>
-          <div className="p-4 rounded-xl bg-amber-50/60 border border-amber-200">
-            <p className="text-xs text-amber-800">Total Leftover Waste</p>
-            <p className="text-xl font-extrabold text-amber-900 mt-1">
-              {reportMetrics.wasteKg.toLocaleString()} kg
-            </p>
-          </div>
-          <div className="p-4 rounded-xl bg-cream-50 border border-slate-200">
-            <p className="text-xs text-slate-500">Waste Cost Incurred</p>
-            <p className="text-xl font-extrabold text-slate-900 mt-1">
-              ₹{reportMetrics.wasteCostInr.toLocaleString('en-IN')}
-            </p>
-          </div>
-        </div>
-
-        {/* Detailed Breakdown Table */}
-        {weeklySeries.length === 0 ? (
-          <div className="p-8 rounded-2xl bg-cream-50 border border-dashed border-slate-300 text-center space-y-3">
-            <TrendingDown className="w-6 h-6 text-slate-400 mx-auto" />
-            <div className="space-y-1">
-              <p className="text-xs font-bold text-slate-800">
-                No operational batch records logged yet
-              </p>
-              <p className="text-xs text-slate-500 max-w-md mx-auto">
-                Log daily prepared and leftover quantities in the Food Waste tab to populate this report table.
-              </p>
+      <Card className="p-5 bg-gradient-to-r from-brand-950 to-brand-800 text-white border-none">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="space-y-1">
+            <div className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-brand-300">
+              <FileSpreadsheet className="w-4 h-4" />
+              <span>Audit-Ready Plate &amp; Procurement Exports</span>
             </div>
-            {onNavigateTab && (
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => onNavigateTab('waste')}
-              >
-                Go to Food Waste →
-              </Button>
-            )}
+            <h2 className="text-lg font-extrabold">
+              Daily, Weekly &amp; Monthly Plate Operational Reports
+            </h2>
+            <p className="text-xs text-brand-100/90 max-w-2xl">
+              Export kitchen preparation, served plates, leftover plates, attendance poll opt-outs, and ingredient purchase plans as clean CSV spreadsheets.
+            </p>
           </div>
-        ) : (
-          <div className="overflow-x-auto rounded-xl border border-slate-200">
-            <table className="w-full text-left border-collapse text-xs">
-              <thead>
-                <tr className="bg-cream-100 border-b border-slate-200 font-bold uppercase text-slate-600">
-                  <th className="py-3 px-4">Day / Period</th>
-                  <th className="py-3 px-4">Food Prepared (kg)</th>
-                  <th className="py-3 px-4">Food Consumed (kg)</th>
-                  <th className="py-3 px-4">Leftover Waste (kg)</th>
-                  <th className="py-3 px-4">Waste Cost (₹)</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {weeklySeries.map((row) => (
-                  <tr key={row.day} className="hover:bg-cream-50/70">
-                    <td className="py-3 px-4 font-bold text-slate-900">
-                      {row.day}
-                    </td>
-                    <td className="py-3 px-4">{row.preparedKg} kg</td>
-                    <td className="py-3 px-4 text-brand-800 font-semibold">
-                      {row.consumedKg} kg
-                    </td>
-                    <td className="py-3 px-4 font-bold text-amber-800">
-                      {row.wasteKg} kg
-                    </td>
-                    <td className="py-3 px-4 font-bold text-slate-900">
-                      ₹{Number(row.wasteCostInr || 0).toLocaleString('en-IN')}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-
-        <div className="text-xs text-slate-500 flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100">
-          <span>
-            Active Inventory Items Monitored: <strong>{inventory.length}</strong>{' '}
-            • Waste Logs Recorded: <strong>{wasteLogs.length}</strong>
-          </span>
-          <span>
-            Avg. Student Satisfaction Score:{' '}
-            <strong>{reportMetrics.avgSatisfaction}</strong>
-          </span>
+          <Badge variant="green">CSV Export Ready</Badge>
         </div>
       </Card>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+        {reportCards.map((rep) => {
+          const Icon = rep.icon;
+          return (
+            <Card
+              key={rep.title}
+              className="p-5 flex flex-col justify-between space-y-4"
+            >
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="w-10 h-10 rounded-xl bg-brand-50 text-brand-800 flex items-center justify-center">
+                    <Icon className="w-5 h-5" />
+                  </div>
+                  <Badge variant="neutral">CSV Format</Badge>
+                </div>
+                <h3 className="text-base font-bold text-slate-900">
+                  {rep.title}
+                </h3>
+                <p className="text-xs text-slate-500 leading-relaxed">
+                  {rep.subtitle}
+                </p>
+              </div>
+
+              <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
+                <span className="text-xs font-semibold text-brand-800">
+                  {rep.metrics}
+                </span>
+                <Button
+                  size="sm"
+                  variant="primary"
+                  icon={Download}
+                  onClick={rep.action}
+                >
+                  {rep.btnText}
+                </Button>
+              </div>
+            </Card>
+          );
+        })}
+      </div>
     </div>
   );
 }

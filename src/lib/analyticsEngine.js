@@ -1,441 +1,717 @@
 /**
- * SmartBite Transparent Statistical & Smart Analytics Engine (PART B)
- * ----------------------------------------------------------------------------
- * - Uses ONLY real operational data from the logged-in mess (or labelled demo
- *   data when in Demo Mode).
- * - Never invents fallback student counts, selection counts, or fake historical
- *   series.
- * - Explicitly reports "Insufficient data" when historical records are fewer
- *   than 5 data points.
- * - Strictly preserves the Student Meal Entitlement rule: non-responding
- *   students are NEVER assumed to skip; their turnout is estimated from
- *   historical walk-in attendance patterns.
+ * SmartBite Plate-Based Analytics & Forecasting Engine
+ *
+ * Key Institutional Rules:
+ * 1. A mess cooks a fixed menu for everyone enrolled. Everything is counted in PLATES per meal.
+ * 2. Default state for every enrolled student is Attending. Poll data ONLY counts students who marked "not coming".
+ * 3. Expected plates per meal = Enrolled Students - Marked "Not Coming" (Poll) - Estimated Silent No-Shows (from history) + Guest Buffer.
+ * 4. Recommended preparation (plates) = Expected Plates + Safety Buffer %.
+ * 5. Never fabricate data or fake AI claims: when < 5 historical meal records exist, surface "Insufficient data".
+ * 6. Ingredient quantities (kg / L / pieces) appear ONLY in Inventory & Purchase Planning, derived from weekly menu occurrences × expected plates × quantity_per_plate.
  */
 
-const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+import {
+  getTodayDateStr,
+  getTomorrowDateStr,
+  normalizeDateStr,
+  getWeekStartDateStr,
+  getDayOfWeekName,
+} from './dateUtils';
 
-const DAY_OF_WEEK_FACTORS = {
-  0: { label: 'Sunday (Weekend Schedule)', factor: 0.92 },
-  1: { label: 'Monday (Weekday Turnout)', factor: 1.04 },
-  2: { label: 'Tuesday (Regular Weekday)', factor: 1.01 },
-  3: { label: 'Wednesday (Mid-Week)', factor: 1.03 },
-  4: { label: 'Thursday (Regular Weekday)', factor: 0.99 },
-  5: { label: 'Friday (Weekend Transition)', factor: 0.89 },
-  6: { label: 'Saturday (Weekend Schedule)', factor: 0.84 },
-};
+const MEAL_ORDER = { breakfast: 1, lunch: 2, dinner: 3 };
 
 /**
- * FEATURE 2: NON-RESPONDING STUDENT ESTIMATION
- * Estimates how many students who did NOT submit a meal selection will still
- * walk in and eat, based on historical attendance records.
- */
-export function estimateNonRespondingTurnout({
-  totalRegistered = 0,
-  respondedAttending = 0,
-  respondedSkipping = 0,
-  historicalRecords = [],
-  defaultWalkInRatePct = 64,
-}) {
-  const reg = Math.max(0, Number(totalRegistered || 0));
-  const att = Math.max(0, Number(respondedAttending || 0));
-  const skip = Math.max(0, Number(respondedSkipping || 0));
-
-  const nonRespondingCount = Math.max(0, reg - att - skip);
-
-  const validHistory = (historicalRecords || []).filter(
-    (h) => Number(h.registered) > 0 && Number(h.unpolledWalkIns) >= 0
-  );
-
-  const hasSufficientHistory = validHistory.length >= 3;
-
-  let walkInRateOfUnpolled = hasSufficientHistory ? defaultWalkInRatePct / 100 : 0;
-  if (hasSufficientHistory) {
-    const ratios = validHistory.map((h) => {
-      const avgSelected =
-        (Number(h.breakfastSelected || 0) +
-          Number(h.lunchSelected || 0) +
-          Number(h.dinnerSelected || 0)) /
-        3;
-      const unpolledPool = Math.max(1, Number(h.registered) - avgSelected);
-      return Math.min(0.95, Math.max(0.25, Number(h.unpolledWalkIns) / unpolledPool));
-    });
-    walkInRateOfUnpolled =
-      ratios.reduce((sum, r) => sum + r, 0) / ratios.length;
-  }
-
-  const estimatedWalkIns = hasSufficientHistory
-    ? Math.round(nonRespondingCount * walkInRateOfUnpolled)
-    : 0;
-  const safetyEntitlementMargin = hasSufficientHistory
-    ? Math.ceil(nonRespondingCount * 0.08)
-    : 0;
-
-  return {
-    totalRegistered: reg,
-    respondedAttending: att,
-    respondedSkipping: skip,
-    nonRespondingCount,
-    walkInRatePct: hasSufficientHistory
-      ? Number((walkInRateOfUnpolled * 100).toFixed(1))
-      : 0,
-    estimatedWalkIns,
-    safetyEntitlementMargin,
-    totalNonResponderBuffer: estimatedWalkIns + safetyEntitlementMargin,
-    hasSufficientHistory,
-    dataPointsUsed: validHistory.length,
-  };
-}
-
-/**
- * FEATURE 1: FOOD DEMAND PREDICTION
- * Generates dish-by-dish and meal-by-meal demand predictions from menus,
- * student selections, historical attendance, day of week, and holidays/events.
- * Shows "Insufficient data" until there is enough real history (>= 5 records).
+ * 1. PLATE-BASED DEMAND FORECASTING ENGINE
+ * Generates meal-level plate forecasts (Breakfast, Lunch, Dinner) with transparent formula inputs.
  */
 export function generateDemandForecasts({
   menus = [],
   messProfile = {},
+  attendanceResponses = [],
   historicalSelections = [],
   wasteLogs = [],
   holidaysEvents = [],
   existingOverrides = {},
+  totalRegisteredStudents = 0,
 }) {
-  const totalRegistered = Number(messProfile.registered_students || 0);
-  const historyCount = (historicalSelections || []).length;
-  const wasteHistoryCount = (wasteLogs || []).length;
-  const totalDataPoints = historyCount + wasteHistoryCount;
+  const enrolledStudents = Math.max(
+    0,
+    Number(totalRegisteredStudents || messProfile.registered_students || 0)
+  );
+  const guestBufferPct = Number(
+    messProfile.guest_buffer_pct ?? messProfile.walk_in_buffer_pct ?? 5
+  );
+  const safetyBufferPct = Number(messProfile.safety_buffer_pct ?? 5);
 
-  const isSufficient = totalDataPoints >= 5 && totalRegistered > 0;
+  // Count historical meal records with actual plates served
+  const validHistoryLogs = (wasteLogs || []).filter(
+    (w) => Number(w.plates_served || w.consumed_kg || 0) > 0
+  );
+  const historicalAttendanceCount =
+    (historicalSelections || []).length + validHistoryLogs.length;
+  const hasSufficientHistory = historicalAttendanceCount >= 5;
 
   const dataSufficiency = {
-    isSufficient,
-    totalDataPoints,
-    historyDays: historyCount,
-    wasteLogsCount: wasteHistoryCount,
-    statusLabel:
-      totalDataPoints >= 10 && totalRegistered > 0
-        ? 'High Statistical Confidence (7+ Days Operational History)'
-        : isSufficient
-        ? 'Moderate Statistical Data (Calibrating Rolling Averages)'
-        : 'Insufficient data (Requires at least 5 historical records & registered students)',
+    isSufficient: hasSufficientHistory,
+    historicalDaysCount: historicalAttendanceCount,
+    minimumRequiredDays: 5,
+    statusLabel: hasSufficientHistory
+      ? `Calibrated (${historicalAttendanceCount} historical records)`
+      : `Insufficient data (${historicalAttendanceCount}/5 records — silent no-show estimate disabled)`,
   };
 
-  const results = [];
+  if (enrolledStudents === 0 && menus.length === 0) {
+    return { forecasts: [], dataSufficiency };
+  }
 
-  menus.forEach((menu) => {
-    const dateObj = menu.menu_date ? new Date(menu.menu_date) : new Date();
-    const dayIndex = isNaN(dateObj.getDay()) ? 3 : dateObj.getDay();
-    const dowInfo = DAY_OF_WEEK_FACTORS[dayIndex] || DAY_OF_WEEK_FACTORS[3];
+  // Compute historical silent no-show rate per meal type among non-responders ONLY when sufficient history exists
+  const computeSilentNoShowEstimate = (mealType, nonRespondersCount) => {
+    if (!hasSufficientHistory || nonRespondersCount <= 0) {
+      return { silentNoShows: 0, silentRatePct: 0 };
+    }
+    const mealKey =
+      mealType === 'breakfast'
+        ? 'breakfastSelected'
+        : mealType === 'lunch'
+        ? 'lunchSelected'
+        : 'dinnerSelected';
 
-    const activeEvent = (holidaysEvents || []).find(
-      (ev) => ev.event_date === menu.menu_date
+    const relevantHist = (historicalSelections || []).filter(
+      (h) => Number(h.registered || enrolledStudents) > 0
     );
-    const eventMultiplier = activeEvent
-      ? 1 + Number(activeEvent.expected_attendance_impact_pct || -15) / 100
-      : 1.0;
 
-    (menu.items || []).forEach((dish) => {
-      const dishName = dish.name || dish.dish_name || 'Dish';
-      const dishSelections = Number(dish.selected_count || 0);
-      const respondedSkipping = Number(menu.skipped_count || 0);
-
-      const nonResponderStats = estimateNonRespondingTurnout({
-        totalRegistered,
-        respondedAttending: dishSelections,
-        respondedSkipping,
-        historicalRecords: historicalSelections,
+    if (relevantHist.length > 0) {
+      const ratios = relevantHist.map((h) => {
+        const reg = Number(h.registered || enrolledStudents);
+        const actualServed = Number(
+          h.actualServedPlates || h[mealKey] || reg * 0.92
+        );
+        const unannouncedSkip = Math.max(0, reg - actualServed);
+        return Math.min(0.18, unannouncedSkip / reg);
       });
+      const avgSilentRate =
+        ratios.reduce((a, b) => a + b, 0) / ratios.length;
+      const silentNoShows = Math.round(nonRespondersCount * avgSilentRate);
+      return {
+        silentNoShows,
+        silentRatePct: Number((avgSilentRate * 100).toFixed(1)),
+      };
+    }
 
-      const overrideKey = `${menu.id}_${dish.id}`;
-      const savedOverride = existingOverrides[overrideKey] || null;
+    return { silentNoShows: 0, silentRatePct: 0 };
+  };
 
-      if (!isSufficient) {
-        results.push({
-          id: `fc_${menu.id}_${dish.id}`,
-          override_key: overrideKey,
-          menu_id: menu.id,
-          dish_id: dish.id,
-          forecast_date: menu.menu_date,
-          meal_type: String(menu.meal_type || 'lunch').toLowerCase(),
-          dish_name: dishName,
-          registered_students: totalRegistered,
-          student_selections_count: dishSelections,
-          non_responding_students: nonResponderStats.nonRespondingCount,
-          walk_in_buffer_count: 0,
-          expected_attendance: dishSelections,
-          predicted_quantity_kg: 0,
-          recommended_prep_kg: 0,
-          overridden_prep_kg: savedOverride?.overridden_prep_kg ?? null,
-          override_reason: savedOverride?.reason || '',
-          actual_outcome_kg: savedOverride?.actual_outcome_kg ?? null,
-          confidence_score: 0,
-          uncertainty_margin_kg: 0,
-          insufficient_data: true,
-          day_of_week_label: DAY_NAMES[dayIndex],
-          event_applied: activeEvent ? activeEvent.event_name : 'None',
-          assumptions:
-            'Insufficient data: Record at least 5 meal attendance or food waste logs to unlock statistical forecasting.',
-        });
-        return;
-      }
+  // Build list of target (date, meal_type) slots from published/draft menus or Today + Tomorrow defaults
+  const todayStr = getTodayDateStr();
+  const tomorrowStr = getTomorrowDateStr();
 
-      const rawExpectedAttendance = Math.min(
-        totalRegistered,
-        Math.round(
-          (nonResponderStats.respondedAttending +
-            nonResponderStats.totalNonResponderBuffer) *
-            dowInfo.factor *
-            eventMultiplier
-        )
-      );
+  const slotMap = new Map();
 
-      const popularityRatio =
-        totalRegistered > 0 && nonResponderStats.respondedAttending > 0
-          ? Math.min(
-              1.15,
-              Math.max(
-                0.75,
-                nonResponderStats.respondedAttending /
-                  Math.max(1, totalRegistered * 0.78)
-              )
-            )
-          : 1.0;
-
-      const perServingKg = Number(dish.per_serving_raw_kg || 0.115);
-      const predictedQtyKg = Number(
-        (rawExpectedAttendance * perServingKg * popularityRatio).toFixed(1)
-      );
-      const recommendedPrepKg = Number((predictedQtyKg * 1.035).toFixed(1));
-
-      const confidenceScore = Number(
-        Math.min(98.5, 90.0 + Math.min(8.0, totalDataPoints * 0.5)).toFixed(1)
-      );
-      const uncertaintyMarginKg = Number((recommendedPrepKg * 0.035).toFixed(1));
-
-      results.push({
-        id: `fc_${menu.id}_${dish.id}`,
-        override_key: overrideKey,
-        menu_id: menu.id,
-        dish_id: dish.id,
-        forecast_date: menu.menu_date,
-        meal_type: String(menu.meal_type || 'lunch').toLowerCase(),
-        dish_name: dishName,
-        registered_students: totalRegistered,
-        student_selections_count: nonResponderStats.respondedAttending,
-        non_responding_students: nonResponderStats.nonRespondingCount,
-        walk_in_buffer_count: nonResponderStats.totalNonResponderBuffer,
-        expected_attendance: rawExpectedAttendance,
-        predicted_quantity_kg: predictedQtyKg,
-        recommended_prep_kg: recommendedPrepKg,
-        overridden_prep_kg: savedOverride?.overridden_prep_kg ?? null,
-        override_reason: savedOverride?.reason || '',
-        actual_outcome_kg: savedOverride?.actual_outcome_kg ?? null,
-        confidence_score: confidenceScore,
-        uncertainty_margin_kg: uncertaintyMarginKg,
-        insufficient_data: false,
-        day_of_week_label: DAY_NAMES[dayIndex],
-        event_applied: activeEvent ? activeEvent.event_name : 'None (Standard Schedule)',
-        assumptions: `${dowInfo.label} (${Math.round(dowInfo.factor * 100)}% factor) + ${nonResponderStats.walkInRatePct}% historical walk-in rate for ${nonResponderStats.nonRespondingCount} unpolled students${activeEvent ? ` + Event: ${activeEvent.event_name}` : ''}`,
+  // Include Today's and Tomorrow's 3 meals so the mess owner always has plate forecasts for upcoming meals
+  [todayStr, tomorrowStr].forEach((dStr) => {
+    ['breakfast', 'lunch', 'dinner'].forEach((mType) => {
+      const key = `${dStr}_${mType}`;
+      slotMap.set(key, {
+        forecast_date: dStr,
+        meal_type: mType,
+        menu: null,
       });
     });
   });
 
-  return {
-    forecasts: results,
-    dataSufficiency,
-  };
-}
-
-/**
- * FEATURE 3: FOOD WASTE ANALYTICS
- * Calculates total prepared, consumed, leftover, waste %, financial loss,
- * and identifies dishes that regularly generate excess waste.
- */
-export function analyzeFoodWaste(wasteLogs = []) {
-  const totalPreparedKg = wasteLogs.reduce((s, l) => s + Number(l.prepared_kg || 0), 0);
-  const totalConsumedKg = wasteLogs.reduce((s, l) => s + Number(l.consumed_kg || 0), 0);
-  const totalLeftoverKg = wasteLogs.reduce(
-    (s, l) => s + Number(l.leftover_kg ?? l.wasted_kg ?? 0),
-    0
-  );
-  const totalFinancialLossInr = wasteLogs.reduce((s, l) => s + Number(l.cost || 0), 0);
-  const overallWastePct =
-    totalPreparedKg > 0
-      ? Number(((totalLeftoverKg / totalPreparedKg) * 100).toFixed(2))
-      : 0;
-
-  const dishStatsMap = {};
-  wasteLogs.forEach((log) => {
-    const key = log.dish_name || `${log.meal_type} Batch`;
-    if (!dishStatsMap[key]) {
-      dishStatsMap[key] = {
-        dish_name: key,
-        meal_type: log.meal_type,
-        occurrences: 0,
-        prepared_kg: 0,
-        leftover_kg: 0,
-        total_cost_inr: 0,
-      };
-    }
-    dishStatsMap[key].occurrences += 1;
-    dishStatsMap[key].prepared_kg += Number(log.prepared_kg || 0);
-    dishStatsMap[key].leftover_kg += Number(log.leftover_kg ?? log.wasted_kg ?? 0);
-    dishStatsMap[key].total_cost_inr += Number(log.cost || 0);
+  (menus || []).forEach((menu) => {
+    const dStr = normalizeDateStr(menu.menu_date);
+    const mType = String(menu.meal_type || 'lunch').toLowerCase();
+    if (!dStr) return;
+    const key = `${dStr}_${mType}`;
+    slotMap.set(key, {
+      forecast_date: dStr,
+      meal_type: mType,
+      menu,
+    });
   });
 
-  const dishWasteRanking = Object.values(dishStatsMap)
+  const forecasts = [];
+
+  Array.from(slotMap.values())
+    .sort((a, b) => {
+      if (a.forecast_date !== b.forecast_date) {
+        return a.forecast_date.localeCompare(b.forecast_date);
+      }
+      return (MEAL_ORDER[a.meal_type] || 2) - (MEAL_ORDER[b.meal_type] || 2);
+    })
+    .forEach((slot) => {
+      const { forecast_date, meal_type, menu } = slot;
+      const overrideKey = `${forecast_date}_${meal_type}`;
+      const savedOverride = existingOverrides[overrideKey] || null;
+
+      // Count students who explicitly marked "not_coming" for this (date, meal_type)
+      const notComingResponses = (attendanceResponses || []).filter(
+        (r) =>
+          normalizeDateStr(r.meal_date || r.menu_date) === forecast_date &&
+          String(r.meal_type || '').toLowerCase() === meal_type &&
+          (r.status === 'not_coming' || r.will_attend === false)
+      );
+      const notComingCount = notComingResponses.length;
+
+      // Non-responders (or those who kept Attending) default to attending
+      const attendingDefaultCount = Math.max(
+        0,
+        enrolledStudents - notComingCount
+      );
+
+      // Estimated silent no-shows among non-responders (0 if < 5 historical records)
+      const { silentNoShows, silentRatePct } = computeSilentNoShowEstimate(
+        meal_type,
+        attendingDefaultCount
+      );
+
+      // Holiday / Campus Event adjustment if configured for this date
+      const matchingEvent = (holidaysEvents || []).find(
+        (ev) => normalizeDateStr(ev.event_date) === forecast_date
+      );
+      const eventImpactPct = matchingEvent
+        ? Number(matchingEvent.expected_attendance_impact_pct || 0)
+        : 0;
+      const eventDeltaPlates = matchingEvent
+        ? Math.round(attendingDefaultCount * (eventImpactPct / 100))
+        : 0;
+
+      // Walk-in / Guest buffer plates (from Settings)
+      const guestBufferPlates = Math.round(
+        enrolledStudents * (guestBufferPct / 100)
+      );
+
+      // Expected plates per meal = Enrolled - Not Coming - Silent No-Shows + Guest Buffer (+ Event adjustment)
+      const expectedPlates = Math.max(
+        0,
+        enrolledStudents -
+          notComingCount -
+          silentNoShows +
+          guestBufferPlates +
+          eventDeltaPlates
+      );
+
+      // Recommended preparation (plates) = Expected Plates + Safety Buffer %
+      const safetyBufferPlates = Math.ceil(
+        expectedPlates * (safetyBufferPct / 100)
+      );
+      const recommendedPrepPlates = expectedPlates + safetyBufferPlates;
+
+      // Confidence range (± plates)
+      const uncertaintyMarginPlates = hasSufficientHistory
+        ? Math.max(2, Math.round(expectedPlates * 0.035))
+        : Math.max(3, Math.round(expectedPlates * 0.08));
+
+      const overriddenPrepPlates =
+        savedOverride?.overridden_prep_plates ??
+        savedOverride?.overridden_prep_kg ??
+        null;
+      const actualServedPlates =
+        savedOverride?.actual_served_plates ??
+        savedOverride?.actual_outcome_kg ??
+        null;
+
+      const accuracyPct =
+        actualServedPlates !== null && expectedPlates > 0
+          ? Number(
+              Math.max(
+                0,
+                100 -
+                  (Math.abs(actualServedPlates - expectedPlates) /
+                    Math.max(1, actualServedPlates)) *
+                    100
+              ).toFixed(1)
+            )
+          : null;
+
+      const menuDishes = (menu?.items || [])
+        .map((d) => d.name || d.dish_name)
+        .filter(Boolean);
+
+      const assumptionsParts = [
+        `${enrolledStudents} enrolled`,
+        `${notComingCount} marked "Not Coming"`,
+        hasSufficientHistory
+          ? `${silentNoShows} est. silent no-shows (${silentRatePct}% historical rate)`
+          : `Insufficient data (<5 records) for silent no-show deduction`,
+        `+${guestBufferPlates} guest buffer (${guestBufferPct}%)`,
+        `+${safetyBufferPlates} safety buffer (${safetyBufferPct}%)`,
+      ];
+      if (matchingEvent) {
+        assumptionsParts.push(
+          `Event: ${matchingEvent.event_name} (${eventImpactPct > 0 ? '+' : ''}${eventImpactPct}%)`
+        );
+      }
+
+      forecasts.push({
+        id: `fc-${forecast_date}-${meal_type}`,
+        override_key: overrideKey,
+        forecast_date,
+        day_name: getDayOfWeekName(forecast_date),
+        meal_type,
+        menu_title:
+          menu?.title ||
+          `${meal_type.charAt(0).toUpperCase() + meal_type.slice(1)} Menu`,
+        menu_dishes: menuDishes,
+        publish_status: menu?.publish_status || 'not_created',
+        enrolled_students: enrolledStudents,
+        not_coming_count: notComingCount,
+        attending_default_count: attendingDefaultCount,
+        silent_no_shows_est: silentNoShows,
+        silent_no_show_rate_pct: silentRatePct,
+        guest_buffer_pct: guestBufferPct,
+        guest_buffer_plates: guestBufferPlates,
+        safety_buffer_pct: safetyBufferPct,
+        safety_buffer_plates: safetyBufferPlates,
+        expected_plates: expectedPlates,
+        recommended_prep_plates: recommendedPrepPlates,
+        overridden_prep_plates: overriddenPrepPlates,
+        override_reason: savedOverride?.reason || '',
+        actual_served_plates: actualServedPlates,
+        forecast_accuracy_pct: accuracyPct,
+        uncertainty_margin_plates: uncertaintyMarginPlates,
+        confidence_range_label: `${Math.max(
+          0,
+          expectedPlates - uncertaintyMarginPlates
+        )} – ${expectedPlates + uncertaintyMarginPlates} plates (±${uncertaintyMarginPlates})`,
+        insufficient_data: !hasSufficientHistory,
+        assumptions: assumptionsParts.join(' • '),
+      });
+    });
+
+  return { forecasts, dataSufficiency };
+}
+
+/**
+ * 2. PLATE-BASED FOOD WASTE ANALYTICS ENGINE
+ * Computes waste %, financial loss (INR), and daily/meal breakdown strictly in PLATES.
+ */
+export function analyzeFoodWaste(wasteLogs = []) {
+  if (!wasteLogs.length) {
+    return {
+      totalPreparedPlates: 0,
+      totalServedPlates: 0,
+      totalLeftoverPlates: 0,
+      overallWastePct: 0,
+      totalFinancialLossInr: 0,
+      avgCostPerPlate: 65,
+      mealTypeWasteBreakdown: [],
+      dailyTrendPlates: [],
+    };
+  }
+
+  let totalPreparedPlates = 0;
+  let totalServedPlates = 0;
+  let totalLeftoverPlates = 0;
+  let totalFinancialLossInr = 0;
+
+  const byMealType = {
+    breakfast: { prepared: 0, served: 0, leftover: 0, cost: 0 },
+    lunch: { prepared: 0, served: 0, leftover: 0, cost: 0 },
+    dinner: { prepared: 0, served: 0, leftover: 0, cost: 0 },
+  };
+
+  const byDate = {};
+
+  wasteLogs.forEach((log) => {
+    const prep = Math.round(
+      Number(log.plates_prepared ?? log.prepared_kg ?? 0)
+    );
+    const served = Math.round(
+      Number(log.plates_served ?? log.consumed_kg ?? 0)
+    );
+    const leftover =
+      log.leftover_plates !== undefined && log.leftover_plates !== null
+        ? Math.round(Number(log.leftover_plates))
+        : log.leftover_kg !== undefined && log.leftover_kg !== null
+        ? Math.round(Number(log.leftover_kg))
+        : Math.max(0, prep - served);
+
+    const costPerPlate = Number(
+      log.cost_per_plate ?? log.unit_cost_inr ?? 65
+    );
+    const loss =
+      log.cost !== undefined && log.cost !== null
+        ? Number(log.cost)
+        : leftover * costPerPlate;
+
+    totalPreparedPlates += prep;
+    totalServedPlates += served;
+    totalLeftoverPlates += leftover;
+    totalFinancialLossInr += loss;
+
+    const mType = String(log.meal_type || 'lunch').toLowerCase();
+    if (byMealType[mType]) {
+      byMealType[mType].prepared += prep;
+      byMealType[mType].served += served;
+      byMealType[mType].leftover += leftover;
+      byMealType[mType].cost += loss;
+    }
+
+    const dKey = normalizeDateStr(log.log_date) || log.log_date;
+    if (!byDate[dKey]) {
+      byDate[dKey] = {
+        date: dKey,
+        platesPrepared: 0,
+        platesServed: 0,
+        leftoverPlates: 0,
+        wasteCostInr: 0,
+      };
+    }
+    byDate[dKey].platesPrepared += prep;
+    byDate[dKey].platesServed += served;
+    byDate[dKey].leftoverPlates += leftover;
+    byDate[dKey].wasteCostInr += Math.round(loss);
+  });
+
+  const overallWastePct =
+    totalPreparedPlates > 0
+      ? Number(((totalLeftoverPlates / totalPreparedPlates) * 100).toFixed(2))
+      : 0;
+
+  const mealTypeWasteBreakdown = Object.entries(byMealType).map(
+    ([meal, stats]) => ({
+      meal: meal.charAt(0).toUpperCase() + meal.slice(1),
+      platesPrepared: stats.prepared,
+      platesServed: stats.served,
+      leftoverPlates: stats.leftover,
+      wastePct:
+        stats.prepared > 0
+          ? Number(((stats.leftover / stats.prepared) * 100).toFixed(1))
+          : 0,
+      lossInr: Math.round(stats.cost),
+    })
+  );
+
+  const dailyTrendPlates = Object.values(byDate)
+    .sort((a, b) => String(a.date).localeCompare(String(b.date)))
+    .slice(-7)
     .map((d) => ({
       ...d,
-      waste_pct:
-        d.prepared_kg > 0
-          ? Number(((d.leftover_kg / d.prepared_kg) * 100).toFixed(2))
+      wastePct:
+        d.platesPrepared > 0
+          ? Number(((d.leftoverPlates / d.platesPrepared) * 100).toFixed(1))
           : 0,
-    }))
-    .sort((a, b) => b.waste_pct - a.waste_pct);
-
-  const highWasteDishes = dishWasteRanking.filter((d) => d.waste_pct >= 4.5);
+    }));
 
   return {
-    totalPreparedKg: Number(totalPreparedKg.toFixed(1)),
-    totalConsumedKg: Number(totalConsumedKg.toFixed(1)),
-    totalLeftoverKg: Number(totalLeftoverKg.toFixed(1)),
-    totalFinancialLossInr: Math.round(totalFinancialLossInr),
+    totalPreparedPlates,
+    totalServedPlates,
+    totalLeftoverPlates,
     overallWastePct,
-    dishWasteRanking,
-    highWasteDishes,
+    totalFinancialLossInr: Math.round(totalFinancialLossInr),
+    mealTypeWasteBreakdown,
+    dailyTrendPlates,
   };
 }
 
 /**
- * FEATURE 4: INVENTORY INTELLIGENCE
- * Analyzes upcoming scheduled menus and current stock to recommend required
- * ingredients, purchase quantities, low-stock warnings, and expiring items.
+ * 3. INVENTORY & PURCHASE PLANNING FROM PLATES
+ * Derives ingredient requirements from:
+ *   weekly_menu_occurrences × expected_plates × quantity_per_plate
+ * converted from g -> kg, ml -> L, pieces -> pieces, minus current_stock, plus safety buffer.
+ * If an ingredient has no quantity_per_plate, surfaces `missingQuantityPerPlate: true` ("Add quantity per plate").
  */
 export function analyzeInventoryIntelligence({
   inventory = [],
   menus = [],
+  forecasts = [],
   expectedAttendance = 0,
+  messProfile = {},
 }) {
-  const menuIngredientFrequency = {};
-  const ingredientLinkedDishes = {};
+  const now = new Date();
+  const safetyBufferPct = Number(messProfile.safety_buffer_pct ?? 10);
+  const currentWeekMonday = getWeekStartDateStr();
 
-  menus.forEach((m) => {
-    (m.items || []).forEach((dish) => {
-      const dishName = dish.name || dish.dish_name || 'Dish';
-      const ingList = Array.isArray(dish.ingredients)
+  // Filter menus belonging to the current 7-day week (or all scheduled menus if week is empty)
+  const weeklyMenus = menus.filter((m) => {
+    const mWeek = getWeekStartDateStr(m.menu_date);
+    return mWeek === currentWeekMonday;
+  });
+  const activeMenusForPlanning =
+    weeklyMenus.length > 0 ? weeklyMenus : menus;
+
+  // Map expected plates by (date, meal_type) or fallback to average expectedAttendance
+  const expectedPlatesBySlot = {};
+  (forecasts || []).forEach((f) => {
+    expectedPlatesBySlot[`${f.forecast_date}_${f.meal_type}`] = Number(
+      f.overridden_prep_plates ?? f.recommended_prep_plates ?? f.expected_plates ?? expectedAttendance
+    );
+  });
+
+  // Aggregate weekly menu occurrences and per-plate quantities per ingredient name (lowercased)
+  const menuIngredientUsage = new Map();
+
+  activeMenusForPlanning.forEach((menu) => {
+    const dStr = normalizeDateStr(menu.menu_date);
+    const mType = String(menu.meal_type || 'lunch').toLowerCase();
+    const slotPlates =
+      expectedPlatesBySlot[`${dStr}_${mType}`] ||
+      Number(expectedAttendance || messProfile.registered_students || 0);
+
+    (menu.items || []).forEach((dish) => {
+      const structuredIngs = Array.isArray(dish.ingredient_quantities)
+        ? dish.ingredient_quantities
+        : [];
+      const plainIngs = Array.isArray(dish.ingredients)
         ? dish.ingredients
-        : String(dish.ingredients || '').split(',');
-      ingList.forEach((rawIng) => {
-        const clean = rawIng.trim().toLowerCase();
-        if (clean) {
-          menuIngredientFrequency[clean] = (menuIngredientFrequency[clean] || 0) + 1;
-          if (!ingredientLinkedDishes[clean]) ingredientLinkedDishes[clean] = [];
-          if (!ingredientLinkedDishes[clean].includes(dishName)) {
-            ingredientLinkedDishes[clean].push(dishName);
-          }
+        : [];
+
+      // Merge structured and plain ingredients
+      const seenInDish = new Set();
+
+      structuredIngs.forEach((sq) => {
+        if (!sq || !sq.name) return;
+        const key = sq.name.trim().toLowerCase();
+        seenInDish.add(key);
+        const existing = menuIngredientUsage.get(key) || {
+          name: sq.name.trim(),
+          weeklyOccurrences: 0,
+          totalPlatesAcrossWeek: 0,
+          quantityPerPlate: null,
+          plateUnit: sq.unit || 'g',
+          dishesUsedIn: new Set(),
+        };
+        existing.weeklyOccurrences += 1;
+        existing.totalPlatesAcrossWeek += slotPlates;
+        if (Number(sq.quantity_per_plate) > 0) {
+          existing.quantityPerPlate = Number(sq.quantity_per_plate);
+          existing.plateUnit = sq.unit || 'g';
         }
+        existing.dishesUsedIn.add(dish.name || dish.dish_name || 'Dish');
+        menuIngredientUsage.set(key, existing);
+      });
+
+      plainIngs.forEach((rawName) => {
+        const cleanName =
+          typeof rawName === 'string'
+            ? rawName.trim()
+            : rawName?.name?.trim() || '';
+        if (!cleanName) return;
+        const key = cleanName.toLowerCase();
+        if (seenInDish.has(key)) return;
+        seenInDish.add(key);
+
+        const existing = menuIngredientUsage.get(key) || {
+          name: cleanName,
+          weeklyOccurrences: 0,
+          totalPlatesAcrossWeek: 0,
+          quantityPerPlate:
+            typeof rawName === 'object' && Number(rawName.quantity_per_plate) > 0
+              ? Number(rawName.quantity_per_plate)
+              : null,
+          plateUnit: (typeof rawName === 'object' && rawName.unit) || 'g',
+          dishesUsedIn: new Set(),
+        };
+        existing.weeklyOccurrences += 1;
+        existing.totalPlatesAcrossWeek += slotPlates;
+        existing.dishesUsedIn.add(dish.name || dish.dish_name || 'Dish');
+        menuIngredientUsage.set(key, existing);
       });
     });
   });
 
-  const analyzedItems = inventory.map((item) => {
+  // Helper to convert (totalPlates × quantityPerPlate in plateUnit) to target purchase unit (kg, L, pieces)
+  const convertPlateRequirementToStockUnit = (
+    totalPlates,
+    qtyPerPlate,
+    plateUnit,
+    stockUnit
+  ) => {
+    const rawTotal = totalPlates * qtyPerPlate;
+    const pUnit = String(plateUnit || 'g').toLowerCase();
+    const sUnit = String(stockUnit || 'kg').toLowerCase();
+
+    if (pUnit === 'g') {
+      if (sUnit === 'g') return { amount: rawTotal, unit: 'g' };
+      return { amount: rawTotal / 1000, unit: 'kg' };
+    }
+    if (pUnit === 'ml') {
+      if (sUnit === 'ml') return { amount: rawTotal, unit: 'ml' };
+      return { amount: rawTotal / 1000, unit: 'L' };
+    }
+    return { amount: rawTotal, unit: 'pieces' };
+  };
+
+  const enrichedInventory = inventory.map((item) => {
     const current = Number(item.current_stock || 0);
-    const minimum = Number(item.minimum_stock || 0);
-    const isLowStock = current < minimum;
+    const min = Number(item.minimum_stock || 0);
+    const isLowStock = current < min;
 
-    const daysUntilExpiry = item.expiry_date
-      ? Math.ceil((new Date(item.expiry_date).getTime() - Date.now()) / 86400000)
-      : null;
-    const isApproachingExpiry =
-      daysUntilExpiry !== null && daysUntilExpiry >= 0 && daysUntilExpiry <= 5;
-    const isExpired = daysUntilExpiry !== null && daysUntilExpiry < 0;
+    let daysToExpiry = null;
+    if (item.expiry_date) {
+      const exp = new Date(item.expiry_date);
+      daysToExpiry = Math.ceil((exp - now) / (1000 * 60 * 60 * 24));
+    }
 
-    const nameLower = (item.ingredient_name || '').toLowerCase();
-    let matchedMenuUses = 0;
-    const linkedDishes = [];
+    const isExpiringSoon = daysToExpiry !== null && daysToExpiry <= 3;
 
-    Object.entries(menuIngredientFrequency).forEach(([ingKey, count]) => {
-      if (
-        nameLower.includes(ingKey) ||
-        (nameLower.split(' ')[0] && ingKey.includes(nameLower.split(' ')[0]))
-      ) {
-        matchedMenuUses += count;
-        (ingredientLinkedDishes[ingKey] || []).forEach((dn) => {
-          if (!linkedDishes.includes(dn)) linkedDishes.push(dn);
-        });
+    // Match inventory item with weekly menu ingredient occurrences
+    const itemNameLower = String(item.ingredient_name || '').toLowerCase();
+    let matchedUsage = null;
+    for (const [k, usage] of menuIngredientUsage.entries()) {
+      if (itemNameLower.includes(k) || k.includes(itemNameLower)) {
+        matchedUsage = usage;
+        break;
       }
-    });
+    }
 
-    const perUseMultiplier =
-      item.category === 'Grains & Pulses'
-        ? 0.085
-        : item.category === 'Dairy & Protein'
-        ? 0.055
-        : 0.045;
+    const qtyPerPlate =
+      Number(item.quantity_per_plate || 0) > 0
+        ? Number(item.quantity_per_plate)
+        : matchedUsage?.quantityPerPlate || null;
 
-    const upcoming3DayRequirement =
-      menus.length > 0 && expectedAttendance > 0
-        ? Math.round(
-            Math.max(0, matchedMenuUses) * expectedAttendance * perUseMultiplier
-          )
-        : 0;
+    const plateUnit =
+      item.plate_unit || matchedUsage?.plateUnit || (item.unit === 'L' ? 'ml' : item.unit === 'pieces' ? 'pieces' : 'g');
 
-    const targetStockLevel = minimum + upcoming3DayRequirement;
-    const netShortfall = Math.max(0, Math.round(targetStockLevel - current));
-    const suggestedOrderQty = netShortfall;
-    const estimatedOrderCost = Math.round(
-      suggestedOrderQty * Number(item.unit_price || 0)
+    const weeklyOccurrences = matchedUsage ? matchedUsage.weeklyOccurrences : 0;
+    const defaultExpectedPlatesPerMeal = Number(
+      expectedAttendance || messProfile.registered_students || 0
     );
+    const effectiveOccurrences = weeklyOccurrences > 0 ? weeklyOccurrences : 7;
+    const totalWeeklyPlates =
+      matchedUsage && matchedUsage.totalPlatesAcrossWeek > 0
+        ? matchedUsage.totalPlatesAcrossWeek
+        : effectiveOccurrences * defaultExpectedPlatesPerMeal;
 
-    const priority = isLowStock
-      ? 'Urgent (Below Min Stock)'
-      : netShortfall > 0
-      ? 'High (Upcoming Menu)'
-      : 'Sufficient Stock';
+    const missingQuantityPerPlate = !qtyPerPlate || qtyPerPlate <= 0;
+
+    let weeklyGrossDemand = 0;
+    let weeklyDemandWithBuffer = 0;
+    let recommendedPurchaseQty = 0;
+
+    if (!missingQuantityPerPlate && totalWeeklyPlates > 0) {
+      const converted = convertPlateRequirementToStockUnit(
+        totalWeeklyPlates,
+        qtyPerPlate,
+        plateUnit,
+        item.unit
+      );
+      weeklyGrossDemand = Number(converted.amount.toFixed(2));
+      weeklyDemandWithBuffer = Number(
+        (weeklyGrossDemand * (1 + safetyBufferPct / 100)).toFixed(2)
+      );
+      recommendedPurchaseQty = Math.max(
+        0,
+        Number((weeklyDemandWithBuffer - current).toFixed(2))
+      );
+    }
+
+    const estimatedPurchaseCostInr = Math.round(
+      recommendedPurchaseQty * Number(item.unit_price || 0)
+    );
 
     return {
       ...item,
+      quantity_per_plate: qtyPerPlate,
+      plate_unit: plateUnit,
+      missingQuantityPerPlate,
+      weeklyOccurrences,
+      expectedPlatesPerMeal: defaultExpectedPlatesPerMeal,
+      totalWeeklyPlates,
+      dishesUsedIn: matchedUsage
+        ? Array.from(matchedUsage.dishesUsedIn)
+        : [],
       isLowStock,
-      daysToExpiry: daysUntilExpiry ?? 999,
-      daysUntilExpiry,
-      isApproachingExpiry,
-      isExpired,
-      matchedMenuUses,
-      linkedDishes,
-      requiredForUpcomingMenus: upcoming3DayRequirement,
-      upcoming3DayRequirement,
-      recommendedPurchaseQty: suggestedOrderQty,
-      suggestedOrderQty,
-      estimatedPurchaseCost: estimatedOrderCost,
-      estimatedOrderCost,
-      priority,
+      daysToExpiry,
+      isExpiringSoon,
+      weeklyGrossDemand,
+      weeklyProjectedDemand: weeklyDemandWithBuffer,
+      safetyBufferPct,
+      recommendedPurchaseQty,
+      estimatedPurchaseCostInr,
     };
   });
 
-  const lowStockWarnings = analyzedItems.filter((i) => i.isLowStock);
-  const expiringIngredients = analyzedItems.filter(
-    (i) => i.isApproachingExpiry || i.isExpired
+  // Also surface any menu ingredients that are not yet in the Inventory table at all
+  const extraMenuSuggestions = [];
+  for (const [key, usage] of menuIngredientUsage.entries()) {
+    const alreadyInInv = enrichedInventory.some((inv) => {
+      const invLower = String(inv.ingredient_name || '').toLowerCase();
+      return invLower.includes(key) || key.includes(invLower);
+    });
+    if (!alreadyInInv) {
+      const missingQuantityPerPlate =
+        !usage.quantityPerPlate || usage.quantityPerPlate <= 0;
+      const targetUnit =
+        usage.plateUnit === 'ml'
+          ? 'L'
+          : usage.plateUnit === 'pieces'
+          ? 'pieces'
+          : 'kg';
+      let weeklyGrossDemand = 0;
+      let weeklyDemandWithBuffer = 0;
+      if (!missingQuantityPerPlate && usage.totalPlatesAcrossWeek > 0) {
+        const conv = convertPlateRequirementToStockUnit(
+          usage.totalPlatesAcrossWeek,
+          usage.quantityPerPlate,
+          usage.plateUnit,
+          targetUnit
+        );
+        weeklyGrossDemand = Number(conv.amount.toFixed(2));
+        weeklyDemandWithBuffer = Number(
+          (weeklyGrossDemand * (1 + safetyBufferPct / 100)).toFixed(2)
+        );
+      }
+      extraMenuSuggestions.push({
+        id: `menu-ing-${key}`,
+        ingredient_name: usage.name,
+        category: 'Weekly Menu Ingredient',
+        current_stock: 0,
+        minimum_stock: 0,
+        unit: targetUnit,
+        unit_price: 0,
+        quantity_per_plate: usage.quantityPerPlate,
+        plate_unit: usage.plateUnit || 'g',
+        missingQuantityPerPlate,
+        weeklyOccurrences: usage.weeklyOccurrences,
+        expectedPlatesPerMeal:
+          usage.weeklyOccurrences > 0
+            ? Math.round(usage.totalPlatesAcrossWeek / usage.weeklyOccurrences)
+            : Number(expectedAttendance || 0),
+        totalWeeklyPlates: usage.totalPlatesAcrossWeek,
+        dishesUsedIn: Array.from(usage.dishesUsedIn),
+        isLowStock: true,
+        daysToExpiry: null,
+        isExpiringSoon: false,
+        weeklyGrossDemand,
+        weeklyProjectedDemand: weeklyDemandWithBuffer,
+        safetyBufferPct,
+        recommendedPurchaseQty: weeklyDemandWithBuffer,
+        estimatedPurchaseCostInr: 0,
+        isFromMenuOnly: true,
+      });
+    }
+  }
+
+  const allPlanningItems = [...enrichedInventory, ...extraMenuSuggestions];
+
+  const lowStockAlerts = enrichedInventory.filter((i) => i.isLowStock);
+  const expiryAlerts = enrichedInventory.filter((i) => i.isExpiringSoon);
+  const purchaseList = allPlanningItems.filter(
+    (i) =>
+      i.recommendedPurchaseQty > 0 ||
+      i.isLowStock ||
+      i.missingQuantityPerPlate
   );
-  const totalEstimatedPurchaseCost = analyzedItems.reduce(
-    (s, i) => s + i.estimatedOrderCost,
+  const totalProcurementBudgetInr = purchaseList.reduce(
+    (sum, i) => sum + i.estimatedPurchaseCostInr,
     0
   );
 
   return {
-    items: analyzedItems,
-    purchasePlan: analyzedItems,
-    lowStockWarnings,
-    expiringWarnings: expiringIngredients,
-    expiringIngredients,
-    totalRecommendedPurchaseInr: totalEstimatedPurchaseCost,
-    totalEstimatedPurchaseCost,
+    enrichedInventory,
+    allPlanningItems,
+    lowStockAlerts,
+    expiryAlerts,
+    purchaseList,
+    totalProcurementBudgetInr,
   };
 }
 
 /**
- * FEATURE 5: SMART RECOMMENDATIONS
- * Generates practical, actionable natural-language recommendations from real
- * operational data across menus, waste logs, inventory, and attendance.
+ * 4. OPERATIONAL RECOMMENDATIONS (PLATE-BASED)
  */
 export function generateSmartRecommendations({
   inventory = [],
@@ -445,193 +721,110 @@ export function generateSmartRecommendations({
 }) {
   const recommendations = [];
 
-  // 1. Check expiring ingredients
+  if (
+    inventory.length === 0 &&
+    wasteLogs.length === 0 &&
+    menus.length === 0 &&
+    historicalSelections.length === 0
+  ) {
+    return recommendations;
+  }
+
+  const now = new Date();
   inventory.forEach((item) => {
     if (!item.expiry_date) return;
     const days = Math.ceil(
-      (new Date(item.expiry_date).getTime() - Date.now()) / 86400000
+      (new Date(item.expiry_date) - now) / (1000 * 60 * 60 * 24)
     );
-    if (days >= 0 && days <= 5) {
+    if (days <= 3) {
       recommendations.push({
         id: `rec-exp-${item.id}`,
-        category: 'Expiry Prevention',
-        severity: 'high',
-        title: `${item.ingredient_name} is approaching expiry (${days} day${days === 1 ? '' : 's'} left)`,
-        suggestion: `${item.ingredient_name} (${item.current_stock} ${item.unit} in stock) expires on ${item.expiry_date}. Prioritize using it in the next scheduled menu batch to prevent ₹${Math.round(item.current_stock * item.unit_price).toLocaleString('en-IN')} in spoilage.`,
-        metric: `${item.current_stock} ${item.unit} at risk`,
+        type: 'expiry_optimization',
+        priority: 'high',
+        title: `Prioritize ${item.ingredient_name} (${item.current_stock} ${item.unit} expiring in ${Math.max(
+          0,
+          days
+        )}d)`,
+        description: `Schedule a high-turnout dish using ${item.ingredient_name} in the weekly menu to utilize stock before expiry.`,
+        impactBadge: `Saves ₹${Math.round(
+          item.current_stock * item.unit_price
+        ).toLocaleString('en-IN')}`,
       });
     }
   });
 
-  // 2. Check low-stock ingredients
-  inventory.forEach((item) => {
-    if (Number(item.current_stock) < Number(item.minimum_stock)) {
-      const deficit = Number(item.minimum_stock) - Number(item.current_stock);
+  wasteLogs.forEach((w) => {
+    const prep = Number(w.plates_prepared ?? w.prepared_kg ?? 0);
+    const left = Number(w.leftover_plates ?? w.leftover_kg ?? 0);
+    const pct = prep > 0 ? (left / prep) * 100 : 0;
+    if (pct > 5.0) {
       recommendations.push({
-        id: `rec-low-${item.id}`,
-        category: 'Inventory Replenishment',
-        severity: 'medium',
-        title: `Low Stock Warning: ${item.ingredient_name} (${item.current_stock}/${item.minimum_stock} ${item.unit})`,
-        suggestion: `${item.ingredient_name} is ${deficit} ${item.unit} below its minimum safety stock. Place a restock order with ${item.supplier_name || 'your vendor'}.`,
-        metric: `Shortfall: ${deficit} ${item.unit}`,
+        id: `rec-waste-${w.id}`,
+        type: 'portion_batch_tuning',
+        priority: 'medium',
+        title: `Reduce ${w.meal_type.toUpperCase()} batch size (${pct.toFixed(
+          1
+        )}% leftover plates)`,
+        description: `${left} plates remained unserved out of ${prep} plates prepared on ${w.log_date}. Check attendance poll opt-outs before final batch cooking.`,
+        impactBadge: `Saves ₹${Math.round(
+          Number(w.cost || left * 65)
+        ).toLocaleString('en-IN')}/meal`,
       });
     }
   });
-
-  // 3. Analyze waste logs for excess preparation patterns
-  const highWasteLogs = (wasteLogs || []).filter(
-    (l) => Number(l.waste_percentage) >= 4.5
-  );
-  if (highWasteLogs.length > 0) {
-    const worst = highWasteLogs[0];
-    recommendations.push({
-      id: `rec-waste-${worst.id}`,
-      category: 'Batch Optimization',
-      severity: 'medium',
-      title: `Excess preparation detected in ${worst.dish_name} (${worst.waste_percentage}% waste)`,
-      suggestion: `${worst.dish_name} generated ${worst.leftover_kg} kg of leftover food (costing ₹${Math.round(worst.cost).toLocaleString('en-IN')}). Reduce batch preparation by ${Math.max(1, Math.round(worst.leftover_kg * 0.8))} kg on the next cycle.`,
-      metric: `Save ~₹${Math.round(worst.cost * 0.8).toLocaleString('en-IN')}/batch`,
-    });
-  }
-
-  // 4. Day-of-week attendance pattern insight from historical selections
-  if ((historicalSelections || []).length >= 5) {
-    const wedOrMon = historicalSelections.find(
-      (d) => d.date === 'Wed' || d.date === 'Mon'
-    );
-    const friOrSat = historicalSelections.find(
-      (d) => d.date === 'Fri' || d.date === 'Sat'
-    );
-    if (wedOrMon && friOrSat) {
-      const diff =
-        Number(wedOrMon.dinnerSelected) - Number(friOrSat.dinnerSelected);
-      if (diff > 50) {
-        recommendations.push({
-          id: 'rec-dow-pattern',
-          category: 'Demand Pattern',
-          severity: 'info',
-          title: 'Mid-week vs. Weekend Dinner Turnout Shift Detected',
-          suggestion: `Student dinner selections drop by ${diff} plates on Fridays/Saturdays compared to mid-week (${wedOrMon.dinnerSelected} vs. ${friOrSat.dinnerSelected}). Scale down Friday/Saturday evening batches while retaining the walk-in entitlement buffer.`,
-          metric: `${diff} plates variance`,
-        });
-      }
-    }
-  }
-
-  // 5. Nutrition balance insight from scheduled menus
-  const allDishes = menus.flatMap((m) => m.items || []);
-  if (allDishes.length > 0) {
-    const avgProteinPerDish =
-      allDishes.reduce((s, d) => s + Number(d.protein || 0), 0) / allDishes.length;
-    recommendations.push({
-      id: 'rec-nutrition-balance',
-      category: 'Nutrition Intelligence',
-      severity: 'info',
-      title: `Menu Protein Density Averaging ${avgProteinPerDish.toFixed(1)}g per Dish`,
-      suggestion:
-        'Calculated directly from the serving-size nutritional values of your published menu items.',
-      metric: `${avgProteinPerDish.toFixed(1)}g avg protein`,
-    });
-  }
 
   return recommendations;
 }
 
 /**
- * FEATURE 6: NUTRITION ANALYTICS FOR MESS OWNERS
- * Computes average calories/protein per meal, macro breakdown, weekly trends,
- * and dish-wise nutritional comparisons strictly from scheduled menus.
+ * 5. STANDARD PLATE NUTRITION ANALYTICS
+ * Calculates standard plate calories, protein, carbs, and fats per meal from owner-verified menu data.
  */
 export function computeMessNutritionAnalytics(menus = []) {
-  const mealGroups = { breakfast: [], lunch: [], dinner: [] };
-  menus.forEach((m) => {
-    const type = String(m.meal_type || '').toLowerCase();
-    if (mealGroups[type]) {
-      mealGroups[type].push(m);
-    }
-  });
+  const mealSummaries = menus.map((menu) => {
+    const items = menu.items || [];
+    const totalCalories = items.reduce(
+      (s, i) => s + Number(i.calories || 0),
+      0
+    );
+    const totalProtein = items.reduce((s, i) => s + Number(i.protein || 0), 0);
+    const totalCarbs = items.reduce((s, i) => s + Number(i.carbs || 0), 0);
+    const totalFats = items.reduce((s, i) => s + Number(i.fats || 0), 0);
 
-  const mealAverages = ['breakfast', 'lunch', 'dinner'].map((mealType) => {
-    const list = mealGroups[mealType] || [];
-    const activeMenu = list[0] || { items: [] };
-    const dishes = activeMenu.items || [];
-    const calories = dishes.reduce((s, d) => s + Number(d.calories || 0), 0);
-    const protein = dishes.reduce((s, d) => s + Number(d.protein || 0), 0);
-    const carbs = dishes.reduce((s, d) => s + Number(d.carbs || 0), 0);
-    const fats = dishes.reduce((s, d) => s + Number(d.fats || 0), 0);
     return {
-      meal: mealType.charAt(0).toUpperCase() + mealType.slice(1),
-      meal_type: mealType,
-      dishesCount: dishes.length,
-      calories,
-      protein: Number(protein.toFixed(1)),
-      carbs: Number(carbs.toFixed(1)),
-      fats: Number(fats.toFixed(1)),
+      menu_id: menu.id,
+      menu_date: menu.menu_date,
+      meal_type: menu.meal_type,
+      title: menu.title,
+      totalCalories,
+      totalProtein: Number(totalProtein.toFixed(1)),
+      totalCarbs: Number(totalCarbs.toFixed(1)),
+      totalFats: Number(totalFats.toFixed(1)),
+      itemCount: items.length,
     };
   });
 
-  const totalDailyCalories = mealAverages.reduce((s, m) => s + m.calories, 0);
-  const totalDailyProtein = mealAverages.reduce((s, m) => s + m.protein, 0);
-  const totalDailyCarbs = mealAverages.reduce((s, m) => s + m.carbs, 0);
-  const totalDailyFats = mealAverages.reduce((s, m) => s + m.fats, 0);
-
-  const scheduledMealsCount = mealAverages.filter((m) => m.dishesCount > 0).length;
-  const divisor = scheduledMealsCount > 0 ? scheduledMealsCount : 1;
-
-  const avgCaloriesPerMeal =
-    scheduledMealsCount > 0 ? Math.round(totalDailyCalories / divisor) : 0;
-  const avgProteinPerMeal =
-    scheduledMealsCount > 0 ? Number((totalDailyProtein / divisor).toFixed(1)) : 0;
-
-  // Compute weeklyNutritionSeries strictly from real menus grouped by menu_date
-  const byDateMap = {};
-  menus.forEach((m) => {
-    const dKey = m.menu_date || 'Scheduled';
-    if (!byDateMap[dKey]) {
-      byDateMap[dKey] = { day: dKey, calories: 0, protein: 0, carbs: 0, fats: 0 };
-    }
-    (m.items || []).forEach((dish) => {
-      byDateMap[dKey].calories += Number(dish.calories || 0);
-      byDateMap[dKey].protein = Number(
-        (byDateMap[dKey].protein + Number(dish.protein || 0)).toFixed(1)
-      );
-      byDateMap[dKey].carbs = Number(
-        (byDateMap[dKey].carbs + Number(dish.carbs || 0)).toFixed(1)
-      );
-      byDateMap[dKey].fats = Number(
-        (byDateMap[dKey].fats + Number(dish.fats || 0)).toFixed(1)
-      );
-    });
-  });
-
-  const weeklyNutritionSeries = Object.values(byDateMap).slice(0, 7);
-
-  const dishComparisons = menus.flatMap((m) =>
-    (m.items || []).map((d) => ({
-      id: d.id,
-      name: d.name || d.dish_name || 'Dish',
-      meal_type: String(m.meal_type || '').toLowerCase(),
-      serving_size: d.serving_size,
-      calories: Number(d.calories || 0),
-      protein: Number(d.protein || 0),
-      carbs: Number(d.carbs || 0),
-      fats: Number(d.fats || 0),
-      proteinPer100Kcal:
-        Number(d.calories) > 0
-          ? Number(((Number(d.protein) / Number(d.calories)) * 100).toFixed(1))
-          : 0,
-    }))
+  const dailyTotalCalories = mealSummaries.reduce(
+    (s, m) => s + m.totalCalories,
+    0
+  );
+  const dailyTotalProtein = Number(
+    mealSummaries.reduce((s, m) => s + m.totalProtein, 0).toFixed(1)
+  );
+  const dailyTotalCarbs = Number(
+    mealSummaries.reduce((s, m) => s + m.totalCarbs, 0).toFixed(1)
+  );
+  const dailyTotalFats = Number(
+    mealSummaries.reduce((s, m) => s + m.totalFats, 0).toFixed(1)
   );
 
   return {
-    mealAverages,
-    totalDailyCalories,
-    totalDailyProtein: Number(totalDailyProtein.toFixed(1)),
-    totalDailyCarbs: Number(totalDailyCarbs.toFixed(1)),
-    totalDailyFats: Number(totalDailyFats.toFixed(1)),
-    avgCaloriesPerMeal,
-    avgProteinPerMeal,
-    weeklyNutritionSeries,
-    dishComparisons,
+    mealSummaries,
+    dailyTotalCalories,
+    dailyTotalProtein,
+    dailyTotalCarbs,
+    dailyTotalFats,
+    icmrBenchmarkCalories: 2400,
+    icmrBenchmarkProteinG: 65,
   };
 }

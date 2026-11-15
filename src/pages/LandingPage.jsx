@@ -136,42 +136,42 @@ const problemsList = [
 const solutionsList = [
   {
     icon: BrainCircuit,
-    title: 'AI Demand Forecasting',
+    title: 'Plate-Based Demand Forecasting',
     description:
-      'Combines student meal selections, historical attendance, day-of-week patterns, and walk-in buffers to estimate dish quantities before cooking begins.',
-    highlight: 'Data-Guided Headcount Planning',
-    pill: 'Demand Engine',
+      'Combines enrolled student count, per-meal skip poll responses, historical silent no-shows, and guest buffers to estimate expected plates before cooking begins.',
+    highlight: 'Expected & Recommended Plates',
+    pill: 'Plate Engine',
   },
   {
     icon: TrendingDown,
-    title: 'Food Waste Tracking',
+    title: 'Plate Waste Tracking',
     description:
-      'Log prepared, consumed, and leftover kilograms per meal to automatically compute waste percentages, rupee costs, and weekly reduction trends.',
-    highlight: 'Batch-Level Waste Ledger',
+      'Log plates prepared, plates served, and leftover plates per meal to automatically compute waste percentages, rupee costs, and weekly reduction trends.',
+    highlight: 'Plate-Level Waste Ledger',
     pill: 'Waste Control',
   },
   {
     icon: PackageSearch,
-    title: 'Smart Inventory Management',
+    title: 'Smart Inventory & Procurement',
     description:
-      'Track real-time ingredient stock, minimum thresholds, supplier purchases, batch consumption, expiry alerts, and automated purchase planning.',
+      'Convert weekly menu occurrences and expected plates into raw ingredient purchase quantities (kg, L, pieces) with low-stock and expiry alerts.',
     highlight: 'Low-Stock & Expiry Alerts',
     pill: 'Store Sync',
   },
   {
     icon: Users,
-    title: 'Student Meal Preferences',
+    title: 'Per-Meal Skip Polls',
     description:
-      'Students select preferred meals and dishes for free. Selections help estimate demand while students retain 100% of their meal entitlement regardless of polling.',
+      'Default status for every student is Attending. Students simply let the mess know when they will skip a meal—and never lose their meal entitlement.',
     highlight: 'Entitlement 100% Protected',
     pill: 'Free for Students',
   },
   {
     icon: Salad,
-    title: 'Nutrition Intelligence',
+    title: 'Standard Plate Nutrition',
     description:
-      'Every scheduled menu automatically calculates calories, protein, carbohydrates, and fats per serving—empowering healthier campus dining.',
-    highlight: 'Per-Serving Macro Breakdown',
+      'Every published weekly menu displays owner-verified calories, protein, carbohydrates, and fats per standard plate—empowering healthier campus dining.',
+    highlight: 'Standard Plate Macros',
     pill: 'ICMR-Aligned',
   },
 ];
@@ -180,71 +180,71 @@ const howItWorksSteps = [
   {
     step: '01',
     icon: UploadCloud,
-    title: 'Mess Publishes Daily Menu',
+    title: 'Mess Publishes Weekly Menu',
     description:
-      'Mess owners schedule breakfast, lunch, and dinner menus with dish photos, serving sizes, ingredients, macros, and selection cutoff deadlines.',
-    previewTitle: 'Lunch Menu Published',
-    previewSub: 'Dal Tadka • Palak Paneer • Jeera Rice',
+      'Mess owners plan the Monday–Sunday fixed menu across Breakfast, Lunch, and Dinner with standard plate nutrition and ingredient quantities per plate.',
+    previewTitle: 'Weekly Menu Published',
+    previewSub: 'Mon–Sun • Breakfast, Lunch & Dinner',
   },
   {
     step: '02',
     icon: CheckSquare,
-    title: 'Students Select Meal Preferences',
+    title: 'Students mark meals they will skip',
     description:
-      'Students view published menus and tap their preferred dishes for free—while keeping full dining entitlement even if they do not submit a selection.',
-    previewTitle: 'Optional Student Poll',
-    previewSub: '100% Entitlement Always Retained',
+      'Default state for every student is Attending. Students let the mess know when they will skip a meal before the cutoff—while retaining 100% meal entitlement.',
+    previewTitle: 'Per-Meal Attendance Poll',
+    previewSub: 'Default: Attending • 100% Entitled',
   },
   {
     step: '03',
     icon: Cpu,
-    title: 'SmartBite Analyzes Demand + Buffer',
+    title: 'SmartBite Calculates Expected Plates',
     description:
-      'Our analytics engine combines student selections with historical turnout and adds a configurable walk-in buffer for unpolled students.',
-    previewTitle: 'Demand + Walk-In Buffer',
-    previewSub: 'Polled Count + Safe Unpolled Margin',
+      'Our analytics engine subtracts students marked "Not Coming" and historical silent no-shows from enrolled students, then adds walk-in guest and safety buffers.',
+    previewTitle: 'Expected Plates + Buffer',
+    previewSub: 'Enrolled − Not Coming + Safe Buffer',
   },
   {
     step: '04',
     icon: ChefHat,
-    title: 'Kitchen Cooks Optimal Batch Sizes',
+    title: 'Kitchen Prepares Optimal Plates',
     description:
-      'Kitchen staff receive kilogram preparation guidance per dish and raw ingredient purchase lists before cooking begins.',
-    previewTitle: 'Batch Prep Guidance',
-    previewSub: 'Exact kg targets per vessel',
+      'Kitchen staff receive recommended plate counts per meal and automated raw ingredient purchase lists derived from expected plates.',
+    previewTitle: 'Plate Prep Guidance',
+    previewSub: 'Recommended plates & store list',
   },
 ];
 
 const majorFeatures = [
   {
     icon: CalendarCheck,
-    title: 'Scheduled Menu & Macro Builder',
+    title: 'Weekly Menu Planner (Mon–Sun)',
     description:
-      'Create daily menus across Breakfast, Lunch, and Dinner with dish images, ingredients, serving sizes, and automatic calorie/protein/carb/fat summaries.',
+      'Plan Monday to Sunday fixed menus across Breakfast, Lunch, and Dinner with Copy Last Week, Duplicate Day, and owner-verified standard plate nutrition.',
   },
   {
     icon: Users,
-    title: 'Non-Restrictive Student Polling',
+    title: 'Per-Meal Attendance Polls',
     description:
-      'Track meal-wise and dish-wise selection counts plus unpolled student counts—built around our unconditional student meal entitlement guarantee.',
+      'Students let the mess know when they will skip a meal ("I will NOT be coming"). Non-response means attending, and no student ever loses entitlement.',
   },
   {
     icon: BrainCircuit,
-    title: 'AI Batch & Buffer Forecasting',
+    title: 'Plate Demand Forecasting',
     description:
-      'View expected attendance, dish-wise predicted kilograms, confidence intervals, and apply manual chef overrides whenever campus events arise.',
+      'View expected plates, recommended preparation in plates, confidence ranges, formula assumptions, and apply manual chef overrides in plates.',
   },
   {
     icon: Scale,
-    title: 'Automated Waste Cost Ledger',
+    title: 'Plate Waste & Cost Ledger',
     description:
-      'Record prepared vs. consumed vs. leftover food in kilograms with automatic waste percentage and rupee cost calculations.',
+      'Record plates prepared, plates served, and leftover plates per meal with automatic waste percentage and rupee cost calculations.',
   },
   {
     icon: ClipboardList,
-    title: 'Inventory & Purchase Planner',
+    title: 'Plate-Derived Purchase Planner',
     description:
-      'Monitor stock levels, expiry dates, purchase/consumption logs, and generate smart purchase lists directly from upcoming scheduled menus.',
+      'Calculate weekly ingredient purchase suggestions (in kg, L, or pieces) from weekly menu occurrences × expected plates × quantity per plate.',
   },
   {
     icon: MessageSquareHeart,
@@ -254,15 +254,15 @@ const majorFeatures = [
   },
   {
     icon: Salad,
-    title: 'Daily & Weekly Nutrition Analytics',
+    title: 'Standard Plate Nutrition Tracker',
     description:
-      'Visualize macro-nutrient balance across meals and ensure institutional menus meet student protein and micronutrient requirements.',
+      'Students view daily macro-nutrient estimates based on the standard plate of the meals they are attending.',
   },
   {
     icon: FileSpreadsheet,
-    title: 'Executive Reports & CSV Exports',
+    title: 'Plate Reports & CSV Exports',
     description:
-      'Generate daily, weekly, and monthly operational, financial, waste, and nutrition compliance reports with one-click export.',
+      'Generate daily, weekly, and monthly plate preparation, leftover plate waste, attendance poll, and procurement reports with one-click CSV export.',
   },
 ];
 
@@ -434,9 +434,9 @@ export default function LandingPage() {
                   </span>
                 </div>
                 <p className="text-xs text-slate-600 leading-relaxed">
-                  Mess operators subscribe to optimize kitchen operations. Students join free to select preferred meals and share feedback—and{' '}
+                  Mess operators subscribe to optimize kitchen plate preparation. Students join free to view the weekly menu and let the mess know when they will skip a meal—and{' '}
                   <strong className="text-slate-900">
-                    students always retain their existing meal entitlement regardless of whether they submit a selection.
+                    every student defaults to Attending and always retains 100% of their meal entitlement.
                   </strong>
                 </p>
               </div>
@@ -533,7 +533,7 @@ export default function LandingPage() {
                       Sample Preview
                     </span>
                     <span className="text-[11px] font-bold text-emerald-700">
-                      +8% Walk-In Buffer
+                      +5% Guest Buffer
                     </span>
                   </div>
                   <p className="text-xs font-bold text-slate-700 mt-2">
@@ -544,7 +544,7 @@ export default function LandingPage() {
                       420 Plates
                     </p>
                     <span className="text-[11px] font-semibold text-brand-700">
-                      385 Polled + 35 Buffer
+                      38 Marked Not Coming
                     </span>
                   </div>
                 </div>
@@ -554,7 +554,7 @@ export default function LandingPage() {
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-[11px] font-bold text-slate-800 flex items-center gap-1.5">
                       <ChefHat className="w-4 h-4 text-brand-700" />
-                      Batch Prep Target (Sample)
+                      Plate Prep Target (Sample)
                     </span>
                     <span className="text-[10px] font-bold text-amber-800 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200">
                       Illustrative
@@ -562,12 +562,12 @@ export default function LandingPage() {
                   </div>
                   <div className="mt-2 space-y-1 text-xs">
                     <div className="flex justify-between text-slate-600">
-                      <span>Palak Paneer:</span>
-                      <strong className="text-brand-800">54 kg rec.</strong>
+                      <span>Expected Plates:</span>
+                      <strong className="text-brand-800">420 plates</strong>
                     </div>
                     <div className="flex justify-between text-slate-600">
-                      <span>Yellow Dal Tadka:</span>
-                      <strong className="text-brand-800">48 kg rec.</strong>
+                      <span>Recommended Prep:</span>
+                      <strong className="text-brand-800">441 plates</strong>
                     </div>
                   </div>
                 </div>
@@ -628,46 +628,46 @@ export default function LandingPage() {
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
                   <div className="p-3 rounded-xl bg-cream-50 border border-slate-200/70">
                     <p className="text-[10px] font-semibold uppercase text-slate-500">
-                      Sample Expected Turnout
+                      Sample Plates Expected
                     </p>
                     <p className="text-lg font-extrabold text-slate-900 mt-0.5">
-                      1,045
+                      1,045 Plates
                     </p>
                     <p className="text-[10px] text-brand-700 font-semibold">
-                      Includes +65 Walk-In Buffer
+                      Includes +57 Guest Buffer
                     </p>
                   </div>
                   <div className="p-3 rounded-xl bg-brand-50/70 border border-brand-200">
                     <p className="text-[10px] font-semibold uppercase text-brand-800">
-                      Sample Meal Selections
+                      Sample Marked Not Coming
                     </p>
                     <p className="text-lg font-extrabold text-brand-900 mt-0.5">
-                      980
+                      95 Students
                     </p>
                     <p className="text-[10px] text-brand-700 font-semibold">
-                      Illustrative Poll Signal
+                      Illustrative Skip Poll Signal
                     </p>
                   </div>
                   <div className="p-3 rounded-xl bg-cream-50 border border-slate-200/70">
                     <p className="text-[10px] font-semibold uppercase text-slate-500">
-                      Sample Batch Prepared
+                      Sample Plates Prepared
                     </p>
                     <p className="text-lg font-extrabold text-slate-900 mt-0.5">
-                      500 kg
+                      1,090 Plates
                     </p>
                     <p className="text-[10px] text-emerald-700 font-semibold">
-                      Illustrative -74 kg vs full capacity
+                      Illustrative -50 plates vs full capacity
                     </p>
                   </div>
                   <div className="p-3 rounded-xl bg-cream-50 border border-slate-200/70">
                     <p className="text-[10px] font-semibold uppercase text-slate-500">
-                      Sample Leftover Ratio
+                      Sample Leftover Plates
                     </p>
                     <p className="text-lg font-extrabold text-brand-800 mt-0.5">
-                      3.8%
+                      36 Plates (3.3%)
                     </p>
                     <p className="text-[10px] text-slate-500 font-semibold">
-                      Illustrative ~₹10,730 saved
+                      Illustrative ~₹6,175 saved
                     </p>
                   </div>
                 </div>
@@ -676,7 +676,7 @@ export default function LandingPage() {
                 <div>
                   <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
                     <p className="text-xs font-bold text-slate-700">
-                      Illustrative Weekly Kitchen Prep (kg): Unassisted vs. SmartBite Guided
+                      Illustrative Weekly Kitchen Prep (plates): Unassisted vs. SmartBite Guided
                     </p>
                     <span className="text-[11px] font-bold text-brand-700">
                       Sample preview chart
@@ -1018,7 +1018,7 @@ export default function LandingPage() {
                   <div className="flex flex-wrap items-center justify-between gap-2 bg-white p-3.5 rounded-xl border border-slate-200">
                     <div>
                       <p className="text-xs font-extrabold text-slate-900">
-                        Menu &amp; Demand Planner • Lunch Session (Sample)
+                        Weekly Menu &amp; Plate Poll Planner • Lunch Session (Sample)
                       </p>
                       <p className="text-[11px] text-slate-500">
                         Join Code: <span className="font-mono font-bold text-brand-800">SB-DEMO01</span> • Status: Published to Students
@@ -1027,29 +1027,29 @@ export default function LandingPage() {
                     <Badge variant="green">Published Menu</Badge>
                   </div>
 
-                  {/* Dish Demand Rows */}
+                  {/* Meal Poll & Plate Rows */}
                   <div className="space-y-2.5">
                     {[
                       {
-                        dish: 'Palak Paneer',
+                        dish: 'Breakfast • High-Energy Campus Thali',
+                        img: '/images/food-seasonal-veg.jpg',
+                        polled: '48 students marked Not Coming',
+                        prep: '412 plates expected',
+                        macros: '700 kcal • 27g P',
+                      },
+                      {
+                        dish: 'Lunch • Palak Paneer, Dal Tadka & Jeera Rice',
                         img: '/images/food-palak-paneer.jpg',
-                        polled: '312 students opted in',
-                        prep: '54 kg recommended',
-                        macros: '260 kcal • 15g P',
+                        polled: '38 students marked Not Coming',
+                        prep: '420 plates expected',
+                        macros: '680 kcal • 24g P',
                       },
                       {
-                        dish: 'Yellow Dal Tadka',
+                        dish: 'Dinner • Punjabi Rajma & Phulka Thali',
                         img: '/images/food-dal-tadka.jpg',
-                        polled: '348 students opted in',
-                        prep: '48 kg recommended',
-                        macros: '195 kcal • 11g P',
-                      },
-                      {
-                        dish: 'Steamed Jeera Rice',
-                        img: '/images/food-jeera-rice.jpg',
-                        polled: '340 students opted in',
-                        prep: '62 kg recommended',
-                        macros: '210 kcal • 4.5g P',
+                        polled: '62 students marked Not Coming',
+                        prep: '398 plates expected',
+                        macros: '760 kcal • 26g P',
                       },
                     ].map((row) => (
                       <div
@@ -1084,7 +1084,7 @@ export default function LandingPage() {
                   <div className="p-3 rounded-xl bg-brand-950 text-white flex flex-wrap items-center justify-between gap-2 text-xs">
                     <span className="flex items-center gap-1.5 font-semibold text-brand-200">
                       <ShieldCheck className="w-4 h-4 text-brand-400" />
-                      Unpolled students covered by +8% Walk-In Buffer
+                      Default status for every student is Attending • Entitlement 100% Protected
                     </span>
                     <Link
                       to="/mess-owner-dashboard"
@@ -1125,64 +1125,33 @@ export default function LandingPage() {
                   {/* Entitlement Guarantee Pill */}
                   <div className="p-2.5 rounded-xl bg-brand-50 border border-brand-200 flex items-center gap-2 text-[11px] text-brand-950 font-semibold">
                     <ShieldCheck className="w-4 h-4 text-brand-700 shrink-0" />
-                    <span>Optional poll • 100% Meal Entitlement Guaranteed</span>
+                    <span>Default: Attending • 100% Meal Entitlement Guaranteed</span>
                   </div>
 
-                  {/* Mobile Dish Selection Cards */}
-                  {[
-                    {
-                      name: 'Palak Paneer (1 Bowl)',
-                      macros: '260 kcal • 15g Protein',
-                      img: '/images/food-palak-paneer.jpg',
-                      selected: true,
-                    },
-                    {
-                      name: 'Yellow Dal Tadka (1 Bowl)',
-                      macros: '195 kcal • 11g Protein',
-                      img: '/images/food-dal-tadka.jpg',
-                      selected: true,
-                    },
-                    {
-                      name: 'Fresh Seasonal Fruit Bowl',
-                      macros: '110 kcal • Vitamins',
-                      img: '/images/food-fresh-fruits.jpg',
-                      selected: true,
-                    },
-                  ].map((item) => (
-                    <div
-                      key={item.name}
-                      className="p-2.5 rounded-2xl bg-white border-2 border-brand-600/80 flex items-center justify-between gap-2.5 shadow-xs"
-                    >
-                      <div className="flex items-center gap-2.5 min-w-0">
-                        <img
-                          src={item.img}
-                          alt={item.name}
-                          width="48"
-                          height="48"
-                          loading="lazy"
-                          className="w-11 h-11 rounded-xl object-cover shrink-0"
-                        />
-                        <div className="min-w-0">
-                          <p className="text-xs font-bold text-slate-900 truncate">
-                            {item.name}
-                          </p>
-                          <p className="text-[10px] font-semibold text-brand-800">
-                            {item.macros}
-                          </p>
-                        </div>
-                      </div>
-                      <CheckCircle2 className="w-4 h-4 text-brand-700 shrink-0" />
+                  {/* Mobile Attendance Poll Card */}
+                  <div className="p-3 rounded-2xl bg-white border-2 border-brand-600/80 space-y-2 shadow-xs">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-extrabold text-slate-900">
+                        Will you have lunch today?
+                      </span>
+                      <Badge variant="green">Attending</Badge>
                     </div>
-                  ))}
+                    <p className="text-[11px] text-slate-500">
+                      Fixed Menu: Palak Paneer • Yellow Dal Tadka • Jeera Rice &amp; Rotis
+                    </p>
+                    <div className="py-1.5 px-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-[11px] font-bold text-center">
+                      Tap &ldquo;I will NOT be coming&rdquo; if skipping
+                    </div>
+                  </div>
 
-                  {/* Plate Macro Total & CTA */}
+                  {/* Standard Plate Macro Total & CTA */}
                   <div className="p-3 rounded-2xl bg-white border border-slate-200 space-y-2">
                     <div className="flex items-center justify-between text-xs">
                       <span className="font-semibold text-slate-600">
-                        Selected Plate Macros:
+                        Standard Plate Macros:
                       </span>
                       <span className="font-extrabold text-brand-800">
-                        565 kcal • 28g Protein
+                        680 kcal • 24g Protein
                       </span>
                     </div>
                     <Link

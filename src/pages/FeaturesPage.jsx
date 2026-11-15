@@ -27,73 +27,73 @@ const coreModules = [
   {
     icon: BrainCircuit,
     tag: 'For Mess Operators',
-    title: 'AI Headcount & Dish Demand Forecasting',
+    title: 'Plate-Based Demand Forecasting',
     description:
-      'Combines real-time student meal selections with historical dining attendance, academic calendars, and day-of-week patterns to model expected meal turnout.',
+      'Combines student skip-poll responses with historical plates served, silent no-show rates, and guest buffers to compute expected plates and recommended plate preparation per meal.',
     bullets: [
-      'Breakfast, Lunch & Dinner turnout predictions',
-      'Automatic weekend & holiday drop-off modeling',
-      'Advance pre-soaking and batch cooking quantity guidance',
+      'Breakfast, Lunch & Dinner expected plate forecasts',
+      'Transparent formula inputs, confidence range & overrides',
+      'Record actual plates served to improve accuracy over time',
     ],
   },
   {
     icon: ShieldCheck,
     tag: 'Entitlement-First Core',
-    title: 'Non-Restrictive Student Polling & Safety Buffer',
+    title: 'Per-Meal Attendance Polls (Skip Notification)',
     description:
-      'Students can tap their meal preference in seconds, yet never lose their meal entitlement if they forget to respond or change their plans last minute.',
+      'Every student defaults to Attending. Students only tap "I will NOT be coming" before the cutoff when they plan to skip a meal—and can undo it anytime before cutoff.',
     bullets: [
-      'Dynamic Walk-In Buffer for unpolled students',
-      'Zero penalty or gate denial at the mess counter',
-      'Portion-size preference signals (Light, Regular, Extra)',
+      'Not responding means the student is counted as attending',
+      'Students never lose their meal entitlement in any case',
+      'Automatic poll opening right after the previous meal finishes',
     ],
   },
   {
     icon: Scale,
     tag: 'Kitchen Operations',
-    title: 'Automated Raw Ingredient Batch Calculator',
+    title: 'Weekly Menu Planner & Purchase Planning',
     description:
-      'Translates predicted student headcount into kilogram and liter quantities of rice, dal, vegetables, paneer, oil, and spices for head chefs.',
+      'Plan the full Monday–Sunday menu with standard plate nutrition and ingredient quantities per plate (g, ml, pieces), automatically scaling into weekly kg/L purchase suggestions.',
     bullets: [
-      'Standardized recipe scaling for institutional dining halls',
-      'Daily storeroom indent & procurement planning sheets',
-      'Per-meal prepared vs. leftover waste cost tracking',
+      'Copy Last Week’s Menu, Duplicate a Day & Publish Week',
+      'Purchase suggestions = occurrences × expected plates × qty/plate',
+      'Low-stock, expiry alerts & "Add quantity per plate" prompts',
     ],
   },
   {
     icon: Salad,
     tag: 'For Students & Dietitians',
-    title: 'ICMR-Aligned Nutrition & Macro Intelligence',
+    title: 'Standard Plate Nutrition & Weekly Menu View',
     description:
-      'Gives every student free access to complete nutritional breakdowns for every mess meal while helping mess committees design balanced menus.',
+      'Students view Today’s Menu and This Week’s Menu for their mess and track daily calories and macros calculated from the meals they are attending.',
     bullets: [
-      'Calorie, Protein, Carbohydrate & Fat breakdown per dish',
-      'Dietary tags (Vegetarian, Jain, High-Protein, Vegan)',
-      'Automatic macro totals as students select their plate',
+      'Calorie, Protein, Carbohydrate & Fat per standard plate',
+      'Clearly labelled as an Estimate based on the standard plate',
+      'Meal History showing attended vs. skipped meals',
     ],
   },
   {
     icon: MessageSquareHeart,
     tag: 'Continuous Improvement',
-    title: 'Dish-Level Taste & Plate-Waste Feedback',
+    title: 'Dish Ratings, Reviews & Suggestions',
     description:
-      'Captures structured student ratings after each meal to help kitchen teams identify why specific dishes generate leftover waste.',
+      'Captures 5-star ratings on dishes from the published menu along with student reviews, complaints, and suggestions for the mess owner.',
     bullets: [
       '5-star dish ratings and structured meal feedback',
-      'Correlates dish feedback with daily leftover logs',
+      'Correlates dish feedback with daily leftover plates',
       'Direct status tracking from Mess Owner dashboard',
     ],
   },
   {
     icon: FileBarChart2,
     tag: 'Executive Governance',
-    title: 'Operational & Waste Cost Analytics',
+    title: 'Plate Waste & Cost Analytics',
     description:
-      'Provides mess operators, hostel wardens, and catering directors with transparent dashboards tracking food waste reduction and inventory stock.',
+      'Staff log plates prepared, plates served, leftover plates, and cost per plate to track daily and weekly waste percentage and waste cost in ₹.',
     bullets: [
-      'Meal-by-meal prepared, consumed, and leftover logs',
-      'Low-stock and ingredient expiry alerts',
-      'One-click CSV report exports for mess committees',
+      'Meal-by-meal plates prepared, served, and leftover logs',
+      'Weekly Kitchen Prep (plates) & Daily Leftover Plates trends',
+      'Daily, weekly, and monthly CSV exports in plates',
     ],
   },
 ];
@@ -240,10 +240,10 @@ export default function FeaturesPage() {
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
                   <h3 className="text-base font-bold text-slate-900">
-                    Batch Preparation vs. Actual Consumption (kg)
+                    Weekly Kitchen Prep (plates) vs. Actual Plates Served
                   </h3>
                   <p className="text-xs text-slate-500">
-                    Illustrative model comparing unassisted cooking vs. demand-guided prep
+                    Illustrative model comparing unassisted cooking vs. plate-guided preparation
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
@@ -260,10 +260,10 @@ export default function FeaturesPage() {
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
                   <h3 className="text-base font-bold text-slate-900">
-                    Student Poll Signals + Walk-In Entitlement Buffer
+                    Attendance Poll Signals + Guest &amp; Safety Buffer (plates)
                   </h3>
                   <p className="text-xs text-slate-500">
-                    Illustrative model showing how unpolled students remain covered by the buffer
+                    Illustrative model showing how default-attending students and guest buffers are counted in plates
                   </p>
                 </div>
                 <div className="flex items-center gap-2">

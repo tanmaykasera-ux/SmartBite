@@ -1,417 +1,303 @@
 import React, { useState, useEffect } from 'react';
 import {
   Settings,
-  Building2,
   Save,
-  CheckCircle2,
+  Clock,
   ShieldCheck,
-  Lock,
-  KeyRound,
-  RefreshCw,
-  Copy,
-  Users,
+  Building2,
+  CheckCircle2,
 } from 'lucide-react';
+import { useData } from '../../context/DataContext';
 import Card from '../common/Card';
 import Badge from '../common/Badge';
 import Button from '../common/Button';
-import { useData } from '../../context/DataContext';
-import { useAuth } from '../../context/AuthContext';
 
 export default function SettingsTab() {
-  const {
-    messProfile,
-    totalRegisteredStudents,
-    updateMessProfile,
-    regenerateMessJoinCode,
-  } = useData();
-  const { user, isDemoMode, updatePassword } = useAuth();
-
-  const liveRegisteredStudentsCount = totalRegisteredStudents;
-
-  const [form, setForm] = useState({
-    name: messProfile.name || '',
-    college_name: messProfile.college_name || '',
-    hostel_name: messProfile.hostel_name || '',
-    contact_number: messProfile.contact_number || '',
-    capacity: messProfile.capacity ?? 0,
-    breakfast_time: messProfile.breakfast_time || '07:30 AM – 09:30 AM',
-    lunch_time: messProfile.lunch_time || '12:30 PM – 02:30 PM',
-    dinner_time: messProfile.dinner_time || '07:30 PM – 09:30 PM',
-    default_cutoff_hours: messProfile.default_cutoff_hours ?? 4,
-    walk_in_buffer_pct: messProfile.walk_in_buffer_pct ?? 8,
-  });
+  const { messProfile, updateMessProfile } = useData();
+  const [form, setForm] = useState(messProfile);
+  const [saved, setSaved] = useState(false);
 
   useEffect(() => {
-    setForm({
-      name: messProfile.name || '',
-      college_name: messProfile.college_name || '',
-      hostel_name: messProfile.hostel_name || '',
-      contact_number: messProfile.contact_number || '',
-      capacity: messProfile.capacity ?? 0,
-      breakfast_time: messProfile.breakfast_time || '07:30 AM – 09:30 AM',
-      lunch_time: messProfile.lunch_time || '12:30 PM – 02:30 PM',
-      dinner_time: messProfile.dinner_time || '07:30 PM – 09:30 PM',
-      default_cutoff_hours: messProfile.default_cutoff_hours ?? 4,
-      walk_in_buffer_pct: messProfile.walk_in_buffer_pct ?? 8,
-    });
+    setForm(messProfile);
   }, [messProfile]);
 
-  const [newPassword, setNewPassword] = useState('');
-  const [savedMessage, setSavedMessage] = useState('');
-  const [pwdMessage, setPwdMessage] = useState('');
-  const [joinCodeNotice, setJoinCodeNotice] = useState('');
-  const [regeneratingCode, setRegeneratingCode] = useState(false);
-
-  const handleSaveProfile = async (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     await updateMessProfile({
       ...form,
-      capacity: Number(form.capacity || 0),
-      default_cutoff_hours: Number(form.default_cutoff_hours || 4),
-      walk_in_buffer_pct: Number(form.walk_in_buffer_pct || 8),
+      capacity: Number(form.capacity),
+      registered_students: Number(form.registered_students),
+      default_cutoff_hours: Number(form.default_cutoff_hours || 2),
+      cutoff_hours: Number(form.default_cutoff_hours || 2),
+      walk_in_buffer_pct: Number(form.walk_in_buffer_pct || 5),
+      guest_buffer_pct: Number(form.walk_in_buffer_pct || 5),
+      safety_buffer_pct: Number(form.safety_buffer_pct || 5),
+      cost_per_plate: Number(form.cost_per_plate || 65),
     });
-    setSavedMessage('Mess profile and operational timings saved successfully!');
-  };
-
-  const handleCopyJoinCode = async () => {
-    const code = messProfile.join_code || 'SB-MESS01';
-    try {
-      await navigator.clipboard.writeText(code);
-      setJoinCodeNotice(`Copied Join Code "${code}" to clipboard!`);
-    } catch {
-      setJoinCodeNotice(`Join Code: ${code}`);
-    }
-  };
-
-  const handleRegenerateJoinCode = async () => {
-    setRegeneratingCode(true);
-    setJoinCodeNotice('');
-    try {
-      const nextCode = await regenerateMessJoinCode();
-      setJoinCodeNotice(
-        `Generated new Mess Join Code: ${nextCode}. Share this code with your students.`
-      );
-    } finally {
-      setRegeneratingCode(false);
-    }
-  };
-
-  const handlePasswordChange = async (e) => {
-    e.preventDefault();
-    if (newPassword.length < 6) return;
-    await updatePassword(newPassword);
-    setNewPassword('');
-    setPwdMessage('Account password updated successfully!');
+    setSaved(true);
+    setTimeout(() => setSaved(false), 3500);
   };
 
   return (
-    <div className="space-y-6 max-w-5xl">
-      {/* Student Mess Join Code & Onboarding Card */}
-      <Card className="p-6 space-y-4 border-brand-200 bg-brand-50/40">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="space-y-1">
-            <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
-              <KeyRound className="w-5 h-5 text-brand-700" />
-              Student Mess Join Code &amp; Onboarding Link
-            </h2>
-            <p className="text-xs text-slate-600 max-w-2xl">
-              Share this unique Join Code with your students. Students can either select{' '}
-              <strong>{messProfile.name || 'your mess'}</strong> from the college dropdown during registration or enter this code to link their account directly to your mess.
-            </p>
-          </div>
-          <Badge variant="green" icon={Users}>
-            {liveRegisteredStudentsCount.toLocaleString()} Linked Students in DB
-          </Badge>
+    <div className="max-w-4xl space-y-6">
+      {saved && (
+        <div className="p-4 rounded-xl bg-brand-900 text-white text-xs font-semibold flex items-center gap-2 shadow-lg">
+          <CheckCircle2 className="w-4 h-4 text-brand-300" />
+          <span>
+            Mess profile, meal timings, poll cutoff hours, and plate buffer settings updated!
+          </span>
         </div>
+      )}
 
-        {joinCodeNotice && (
-          <div className="p-3 rounded-xl bg-white border border-brand-300 text-xs font-semibold text-brand-900 flex items-center gap-2">
-            <CheckCircle2 className="w-4 h-4 text-brand-700 shrink-0" />
-            <span>{joinCodeNotice}</span>
-          </div>
-        )}
-
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 p-4 rounded-xl bg-white border border-brand-200">
-          <div>
-            <span className="block text-[11px] font-bold uppercase tracking-wider text-slate-500">
-              Active Mess Join Code
-            </span>
-            <p className="text-2xl font-mono font-extrabold text-brand-900 tracking-wider mt-0.5">
-              {messProfile.join_code || 'SB-MESS01'}
-            </p>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2.5">
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              icon={Copy}
-              iconPosition="left"
-              onClick={handleCopyJoinCode}
-            >
-              Copy Join Code
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              icon={RefreshCw}
-              iconPosition="left"
-              disabled={regeneratingCode}
-              onClick={handleRegenerateJoinCode}
-            >
-              {regeneratingCode ? 'Regenerating...' : 'Regenerate Code'}
-            </Button>
-          </div>
-        </div>
-      </Card>
-
-      {/* Mess Profile & Operational Timings Card */}
       <Card className="p-6 space-y-6">
-        <div className="flex items-center justify-between border-b border-slate-100 pb-4">
-          <div>
-            <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-              <Building2 className="w-5 h-5 text-brand-700" />
-              Mess Profile &amp; Kitchen Operational Settings
-            </h2>
-            <p className="text-xs text-slate-500">
-              Configure your institutional mess details, student capacity, and AI walk-in safety buffer
-            </p>
+        <div className="flex items-center justify-between pb-4 border-b border-slate-100">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-brand-100 text-brand-800 flex items-center justify-center">
+              <Building2 className="w-5 h-5" />
+            </div>
+            <div>
+              <h2 className="text-base font-bold text-slate-900">
+                Mess Profile &amp; Plate Poll Configuration
+              </h2>
+              <p className="text-xs text-slate-500">
+                Configure hostel capacity, meal serving windows, poll cutoff hours, and plate buffers
+              </p>
+            </div>
           </div>
-          <Badge variant="green" icon={Settings}>
-            Mess Owner Settings
+          <Badge variant="green">
+            {messProfile.plan_name || 'Active Mess'}
           </Badge>
         </div>
 
-        {savedMessage && (
-          <div className="p-3.5 rounded-xl bg-brand-50 border border-brand-200 text-xs font-semibold text-brand-900 flex items-center gap-2">
-            <CheckCircle2 className="w-4 h-4 text-brand-700 shrink-0" />
-            <span>{savedMessage}</span>
-          </div>
-        )}
-
-        <form onSubmit={handleSaveProfile} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-5">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
-                Mess / Kitchen Name *
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                Mess Name *
               </label>
               <input
                 type="text"
                 required
-                value={form.name}
+                value={form.name || ''}
                 onChange={(e) => setForm({ ...form, name: e.target.value })}
-                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-brand-700"
+                className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-xs font-semibold"
               />
             </div>
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
-                College / Institution Name *
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                College / University Name *
               </label>
               <input
                 type="text"
                 required
-                value={form.college_name}
+                value={form.college_name || ''}
                 onChange={(e) =>
                   setForm({ ...form, college_name: e.target.value })
                 }
-                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-brand-700"
+                className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-xs font-semibold"
               />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
-                Hostel Blocks Served
-              </label>
-              <input
-                type="text"
-                value={form.hostel_name}
-                onChange={(e) =>
-                  setForm({ ...form, hostel_name: e.target.value })
-                }
-                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
-                Contact Phone Number
-              </label>
-              <input
-                type="tel"
-                value={form.contact_number}
-                onChange={(e) =>
-                  setForm({ ...form, contact_number: e.target.value })
-                }
-                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
-                Student Capacity (Max Seats)
-              </label>
-              <input
-                type="number"
-                min={0}
-                value={form.capacity}
-                onChange={(e) =>
-                  setForm({ ...form, capacity: e.target.value })
-                }
-                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm font-bold"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
-                Registered Students (Live DB Count)
-              </label>
-              <div className="w-full px-3.5 py-2.5 rounded-xl border border-brand-200 bg-brand-50/70 text-sm font-extrabold text-brand-900 flex items-center justify-between">
-                <span>{liveRegisteredStudentsCount.toLocaleString()}</span>
-                <span className="text-[10px] font-bold uppercase text-brand-700">
-                  Real DB Rows
-                </span>
-              </div>
             </div>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
-                Breakfast Serving Window
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                Hostel Blocks Covered
               </label>
               <input
                 type="text"
-                value={form.breakfast_time}
+                value={form.hostel_name || ''}
                 onChange={(e) =>
-                  setForm({ ...form, breakfast_time: e.target.value })
+                  setForm({ ...form, hostel_name: e.target.value })
                 }
-                className="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-xs"
+                className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-xs font-semibold"
               />
             </div>
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
-                Lunch Serving Window
-              </label>
-              <input
-                type="text"
-                value={form.lunch_time}
-                onChange={(e) =>
-                  setForm({ ...form, lunch_time: e.target.value })
-                }
-                className="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-xs"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
-                Dinner Serving Window
-              </label>
-              <input
-                type="text"
-                value={form.dinner_time}
-                onChange={(e) =>
-                  setForm({ ...form, dinner_time: e.target.value })
-                }
-                className="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-xs"
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
-                Default Selection Cutoff (Hours Before Meal)
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                Total Seating / Dining Capacity
               </label>
               <input
                 type="number"
-                min={1}
-                max={24}
-                value={form.default_cutoff_hours}
+                required
+                value={form.capacity ?? 0}
                 onChange={(e) =>
-                  setForm({ ...form, default_cutoff_hours: e.target.value })
+                  setForm({ ...form, capacity: e.target.value })
                 }
-                className="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-sm"
+                className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-xs font-bold"
               />
             </div>
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
-                Walk-In Entitlement Safety Buffer (%)
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                Enrolled Students (Live DB Count)
               </label>
               <input
                 type="number"
-                min={3}
-                max={30}
-                value={form.walk_in_buffer_pct}
-                onChange={(e) =>
-                  setForm({ ...form, walk_in_buffer_pct: e.target.value })
-                }
-                className="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-sm"
+                readOnly
+                value={form.registered_students ?? 0}
+                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2 text-xs font-bold text-brand-900"
               />
             </div>
           </div>
 
-          <div className="p-3.5 rounded-xl bg-brand-50 border border-brand-200 text-xs text-brand-950 flex items-center gap-2">
-            <ShieldCheck className="w-4 h-4 text-brand-800 shrink-0" />
-            <span>
-              <strong>Entitlement Rule Enforced:</strong> Students always retain their dining entitlement regardless of whether they submit a selection before the cutoff window.
-            </span>
+          {/* Meal Serving Windows & Poll Timing Rules */}
+          <div className="pt-3 border-t border-slate-100 space-y-3">
+            <div>
+              <h3 className="text-xs font-extrabold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+                <Clock className="w-3.5 h-3.5 text-brand-700" />
+                <span>
+                  Meal Timings (Asia/Kolkata) &amp; Sequential Attendance Poll Schedule
+                </span>
+              </h3>
+              <p className="text-[11px] text-slate-500 mt-0.5">
+                Breakfast ends &rarr; Lunch poll opens. Lunch ends &rarr; Dinner poll opens. Dinner ends &rarr; Next day&rsquo;s Breakfast poll opens. Each poll closes at the cutoff hours before its meal starts.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Breakfast Window
+                </label>
+                <input
+                  type="text"
+                  value={form.breakfast_time || '07:30 AM – 09:30 AM'}
+                  onChange={(e) =>
+                    setForm({ ...form, breakfast_time: e.target.value })
+                  }
+                  placeholder="07:30 AM – 09:30 AM"
+                  className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-xs"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Lunch Window
+                </label>
+                <input
+                  type="text"
+                  value={form.lunch_time || '12:30 PM – 02:30 PM'}
+                  onChange={(e) =>
+                    setForm({ ...form, lunch_time: e.target.value })
+                  }
+                  placeholder="12:30 PM – 02:30 PM"
+                  className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-xs"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Dinner Window
+                </label>
+                <input
+                  type="text"
+                  value={form.dinner_time || '07:30 PM – 09:30 PM'}
+                  onChange={(e) =>
+                    setForm({ ...form, dinner_time: e.target.value })
+                  }
+                  placeholder="07:30 PM – 09:30 PM"
+                  className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-xs"
+                />
+              </div>
+            </div>
           </div>
 
-          <div className="flex justify-end">
-            <Button
-              type="submit"
-              variant="primary"
-              icon={Save}
-              iconPosition="left"
-            >
-              Save Mess Profile Settings
+          {/* Plate Forecasting & Cutoff Parameters */}
+          <div className="pt-3 border-t border-slate-100 space-y-3">
+            <h3 className="text-xs font-extrabold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+              <ShieldCheck className="w-3.5 h-3.5 text-brand-700" />
+              <span>
+                Poll Cutoff, Walk-In Guest Buffer &amp; Safety Buffer Parameters
+              </span>
+            </h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Poll Cutoff Hours Before Meal
+                </label>
+                <input
+                  type="number"
+                  min="0.5"
+                  max="12"
+                  step="0.5"
+                  value={form.default_cutoff_hours ?? 2}
+                  onChange={(e) =>
+                    setForm({
+                      ...form,
+                      default_cutoff_hours: e.target.value,
+                    })
+                  }
+                  className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-xs font-bold"
+                />
+                <p className="text-[11px] text-slate-400 mt-1">
+                  Poll locks this many hours before meal start.
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Walk-In / Guest Buffer (%)
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  max="25"
+                  step="0.5"
+                  value={form.walk_in_buffer_pct ?? 5}
+                  onChange={(e) =>
+                    setForm({ ...form, walk_in_buffer_pct: e.target.value })
+                  }
+                  className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-xs font-bold text-brand-800"
+                />
+                <p className="text-[11px] text-slate-400 mt-1">
+                  Added to expected plates per meal.
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Recommended Prep Safety Buffer (%)
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  max="25"
+                  step="0.5"
+                  value={form.safety_buffer_pct ?? 5}
+                  onChange={(e) =>
+                    setForm({ ...form, safety_buffer_pct: e.target.value })
+                  }
+                  className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-xs font-bold text-brand-800"
+                />
+                <p className="text-[11px] text-slate-400 mt-1">
+                  Recommended prep = expected plates + safety buffer %.
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Default Cost per Plate (₹)
+                </label>
+                <input
+                  type="number"
+                  min="10"
+                  step="1"
+                  value={form.cost_per_plate ?? 65}
+                  onChange={(e) =>
+                    setForm({ ...form, cost_per_plate: e.target.value })
+                  }
+                  className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-xs font-bold"
+                />
+                <p className="text-[11px] text-slate-400 mt-1">
+                  Default plate cost used in Food Waste logging.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="pt-4 border-t border-slate-100 flex justify-end">
+            <Button type="submit" variant="primary" icon={Save}>
+              Save Mess Configuration
             </Button>
           </div>
-        </form>
-      </Card>
-
-      {/* Account & Password Settings */}
-      <Card className="p-6 space-y-5">
-        <div className="border-b border-slate-100 pb-3">
-          <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-            <Lock className="w-4 h-4 text-brand-700" />
-            Account &amp; Security Settings
-          </h3>
-          <p className="text-xs text-slate-500">
-            Signed in as{' '}
-            <strong>{user?.fullName || messProfile.owner_name}</strong> (
-            {user?.email || messProfile.owner_email})
-          </p>
-        </div>
-
-        {pwdMessage && (
-          <div className="p-3 rounded-xl bg-brand-50 border border-brand-200 text-xs font-semibold text-brand-900 flex items-center gap-2">
-            <CheckCircle2 className="w-4 h-4 text-brand-700 shrink-0" />
-            <span>{pwdMessage}</span>
-          </div>
-        )}
-
-        <form
-          onSubmit={handlePasswordChange}
-          className="flex flex-col sm:flex-row items-end gap-4"
-        >
-          <div className="flex-1 w-full">
-            <label className="block text-xs font-semibold text-slate-700 mb-1">
-              Update Account Password (min 6 characters)
-            </label>
-            <input
-              type="password"
-              minLength={6}
-              required
-              value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
-              placeholder="Enter new password..."
-              className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm"
-            />
-          </div>
-          <Button type="submit" variant="secondary">
-            Update Password
-          </Button>
         </form>
       </Card>
     </div>
