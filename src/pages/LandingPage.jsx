@@ -330,13 +330,20 @@ export default function LandingPage() {
     setDemoLoading(true);
     try {
       await submitDemoRequest({
-        ...demoForm,
+        full_name: demoForm.full_name,
+        work_email: demoForm.work_email,
+        phone: demoForm.phone,
+        institution_name: demoForm.institution_name,
+        mess_name: demoForm.mess_name,
+        institution_type: demoForm.institution_type,
         daily_meals_served: Number(demoForm.daily_meals_served || 1000),
+        message: demoForm.message,
       });
       setDemoSuccess(true);
     } catch (err) {
       setDemoError(
-        err.message || 'Unable to submit demo request. Please try again.'
+        err?.message ||
+          'We could not submit your demo request at this moment. Please check your details and try again.'
       );
     } finally {
       setDemoLoading(false);

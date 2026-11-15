@@ -47,49 +47,99 @@ export async function uploadFoodImage(file) {
 }
 
 /**
- * Submit a B2B Demo Request (persists to Supabase `demo_requests` if configured, with Demo Mode fallback)
+ * Helper to generate a client-side UUID v4 without requiring SELECT/RETURNING from Supabase
  */
-export async function submitDemoRequest(payload) {
+function generateClientUuid() {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
+/**
+ * Submit a B2B Demo Request (persists to Supabase `demo_requests` if configured, with Demo Mode fallback).
+ * Uses insert-only (no .select() or .single()) and sends only public anon-allowed columns
+ * so anonymous visitors never trigger SELECT RLS policies.
+ */
+export async function submitDemoRequest(payload = {}) {
+  const clientId = generateClientUuid();
+  const cleanRow = {
+    id: clientId,
+    full_name: String(payload.full_name || '').trim(),
+    work_email: String(payload.work_email || '').trim(),
+    phone: String(payload.phone || '').trim(),
+    institution_name: String(payload.institution_name || '').trim(),
+    institution_type: String(payload.institution_type || 'college_mess').trim(),
+    daily_meals_served: Math.max(1, Math.round(Number(payload.daily_meals_served) || 500)),
+    message: payload.message ? String(payload.message).trim() : null,
+  };
+
+  if (payload.mess_name && String(payload.mess_name).trim()) {
+    cleanRow.mess_name = String(payload.mess_name).trim();
+  }
+
   if (isSupabaseConfigured && supabase) {
-    const { data, error } = await supabase
+    const { error } = await supabase
       .from('demo_requests')
-      .insert([payload])
-      .select();
-    if (error) throw error;
-    return data;
+      .insert(cleanRow);
+
+    if (error) {
+      throw new Error(
+        error.message || 'Unable to submit your demo request right now. Please try again.'
+      );
+    }
+    return { ...cleanRow };
   }
 
   const existing = JSON.parse(localStorage.getItem('smartbite_demo_requests') || '[]');
   const record = {
-    id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()),
-    ...payload,
-    status: 'new',
+    ...cleanRow,
     created_at: new Date().toISOString(),
   };
   localStorage.setItem('smartbite_demo_requests', JSON.stringify([record, ...existing]));
-  return [record];
+  return record;
 }
 
 /**
- * Submit a Contact Message (persists to Supabase `contact_messages` if configured, with Demo Mode fallback)
+ * Submit a Contact Message (persists to Supabase `contact_messages` if configured, with Demo Mode fallback).
+ * Uses insert-only (no .select() or .single()) and sends only public anon-allowed columns
+ * so anonymous visitors never trigger SELECT RLS policies.
  */
-export async function submitContactMessage(payload) {
+export async function submitContactMessage(payload = {}) {
+  const clientId = generateClientUuid();
+  const cleanRow = {
+    id: clientId,
+    full_name: String(payload.full_name || '').trim(),
+    email: String(payload.email || '').trim(),
+    institution_name: payload.institution_name
+      ? String(payload.institution_name).trim()
+      : null,
+    topic: String(payload.topic || 'General Inquiry').trim(),
+    message: String(payload.message || '').trim(),
+  };
+
   if (isSupabaseConfigured && supabase) {
-    const { data, error } = await supabase
+    const { error } = await supabase
       .from('contact_messages')
-      .insert([payload])
-      .select();
-    if (error) throw error;
-    return data;
+      .insert(cleanRow);
+
+    if (error) {
+      throw new Error(
+        error.message || 'Unable to send your message right now. Please try again.'
+      );
+    }
+    return { ...cleanRow };
   }
 
   const existing = JSON.parse(localStorage.getItem('smartbite_contact_messages') || '[]');
   const record = {
-    id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()),
-    ...payload,
-    status: 'unread',
+    ...cleanRow,
     created_at: new Date().toISOString(),
   };
   localStorage.setItem('smartbite_contact_messages', JSON.stringify([record, ...existing]));
-  return [record];
+  return record;
 }

@@ -33,10 +33,19 @@ export default function ContactPage() {
     setError('');
     setSubmitting(true);
     try {
-      await submitContactMessage(formData);
+      await submitContactMessage({
+        full_name: formData.full_name,
+        email: formData.email,
+        institution_name: formData.institution_name,
+        topic: formData.topic,
+        message: formData.message,
+      });
       setSubmitted(true);
     } catch (err) {
-      setError(err.message || 'Unable to send message. Please try again.');
+      setError(
+        err?.message ||
+          'We could not send your message at this moment. Please check your details and try again.'
+      );
     } finally {
       setSubmitting(false);
     }

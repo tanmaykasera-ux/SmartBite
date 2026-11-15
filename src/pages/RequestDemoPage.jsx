@@ -38,12 +38,20 @@ export default function RequestDemoPage() {
     setError('');
     try {
       await submitDemoRequest({
-        ...formState,
+        full_name: formState.full_name,
+        work_email: formState.work_email,
+        phone: formState.phone,
+        institution_name: formState.institution_name,
+        institution_type: formState.institution_type,
         daily_meals_served: Number(studentsCount) * 3,
+        message: formState.message,
       });
       setSubmitted(true);
     } catch (err) {
-      setError(err.message || 'Could not submit request. Please try again.');
+      setError(
+        err?.message ||
+          'We could not submit your demo request at this moment. Please check your details and try again.'
+      );
     } finally {
       setSubmitting(false);
     }
