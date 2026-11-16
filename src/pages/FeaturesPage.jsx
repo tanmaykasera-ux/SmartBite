@@ -51,24 +51,24 @@ const coreModules = [
   {
     icon: Scale,
     tag: 'Kitchen Operations',
-    title: 'Weekly Menu Planner & Purchase Planning',
+    title: 'Weekly Menu Planner (Monday – Sunday)',
     description:
-      'Plan the full Monday–Sunday menu with standard plate nutrition and ingredient quantities per plate (g, ml, pieces), automatically scaling into weekly kg/L purchase suggestions.',
+      'Plan the full Monday–Sunday fixed menu across Breakfast, Lunch, and Dinner with dish photos, descriptions, and one-click week publishing.',
     bullets: [
-      'Copy Last Week’s Menu, Duplicate a Day & Publish Week',
-      'Purchase suggestions = occurrences × expected plates × qty/plate',
-      'Low-stock, expiry alerts & "Add quantity per plate" prompts',
+      'Copy Last Week’s Menu & Duplicate a Day in one click',
+      'Save Week as Draft or Publish Week to students',
+      'Draft menus stay hidden until officially published',
     ],
   },
   {
     icon: Salad,
-    tag: 'For Students & Dietitians',
-    title: 'Standard Plate Nutrition & Weekly Menu View',
+    tag: 'For Students',
+    title: 'Today’s Menu, Weekly Schedule & Meal History',
     description:
-      'Students view Today’s Menu and This Week’s Menu for their mess and track daily calories and macros calculated from the meals they are attending.',
+      'Students view Today’s Menu and This Week’s Menu for their linked mess, respond to attendance polls, and review their past meal attendance history.',
     bullets: [
-      'Calorie, Protein, Carbohydrate & Fat per standard plate',
-      'Clearly labelled as an Estimate based on the standard plate',
+      'Instant access to Today’s Menu & This Week’s Menu',
+      'In-app notifications when the next meal poll opens',
       'Meal History showing attended vs. skipped meals',
     ],
   },
@@ -87,13 +87,13 @@ const coreModules = [
   {
     icon: FileBarChart2,
     tag: 'Executive Governance',
-    title: 'Plate Waste & Cost Analytics',
+    title: 'Plate Waste & Attendance Reports',
     description:
-      'Staff log plates prepared, plates served, leftover plates, and cost per plate to track daily and weekly waste percentage and waste cost in ₹.',
+      'Staff log plates prepared, plates served, leftover plates, and cost per plate, and export daily, weekly, and monthly attendance reports.',
     bullets: [
       'Meal-by-meal plates prepared, served, and leftover logs',
       'Weekly Kitchen Prep (plates) & Daily Leftover Plates trends',
-      'Daily, weekly, and monthly CSV exports in plates',
+      'Attendance Report with CSV download and print view',
     ],
   },
 ];
@@ -121,11 +121,11 @@ export default function FeaturesPage() {
               <h1 className="text-3xl sm:text-5xl font-extrabold text-slate-900 tracking-tight leading-tight">
                 Every Tool Needed to Run a{' '}
                 <span className="text-brand-800">
-                  Low-Waste, High-Nutrition Mess
+                  Low-Waste, Well-Planned Mess
                 </span>
               </h1>
               <p className="text-base sm:text-lg text-slate-600 leading-relaxed max-w-2xl">
-                Built specifically for college messes, hostels, and campus cafeterias where mess operators subscribe for operational intelligence and students enjoy free nutrition and meal preference tools.
+                Built specifically for college messes, hostels, and campus cafeterias where mess operators forecast plate attendance, publish weekly menus, and reduce leftover waste while students enjoy free menu and attendance tools.
               </p>
               <div className="space-y-3 pt-2">
                 <div className="flex flex-wrap gap-3">

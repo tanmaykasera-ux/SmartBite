@@ -224,7 +224,7 @@ export default function RegisterPage() {
             Create Your SmartBite Account
           </h1>
           <p className="text-sm sm:text-base text-slate-600 leading-relaxed">
-            Register as a <strong>Mess Owner</strong> to manage menus, inventory, and AI demand forecasting, or register as a <strong>Student</strong> for free meal preference and nutrition access.
+            Register as a <strong>Mess Owner</strong> to manage weekly menus, attendance polls, and plate demand forecasting, or register as a <strong>Student</strong> for free weekly menu and meal attendance access.
           </p>
 
           <Card className="bg-brand-950 text-white border-brand-900 space-y-4">
@@ -293,7 +293,7 @@ export default function RegisterPage() {
                   </span>
                 </div>
                 <p className="text-xs text-slate-500 mt-1">
-                  Manage menus, forecasts, waste &amp; inventory.
+                  Manage weekly menus, polls, forecasts &amp; waste.
                 </p>
               </button>
 

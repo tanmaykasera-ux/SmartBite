@@ -193,11 +193,11 @@ export default function PricingPage() {
               },
               {
                 q: 'Is SmartBite an online food ordering or delivery platform?',
-                a: 'No. SmartBite is an institutional B2B food management and nutrition intelligence platform designed for fixed-menu or buffet messes, hostels, and campus cafeterias.',
+                a: 'No. SmartBite is an institutional B2B mess management platform designed for fixed-menu messes, hostels, and campus cafeterias to forecast attendance, plan weekly menus, and reduce plate waste.',
               },
               {
                 q: 'How is return on investment (ROI) modeled for a mess?',
-                a: 'In an illustrative 1,000-student mess scenario, preventing 15%–25% of daily overproduction helps offset raw ingredient wastage while improving dish planning and nutritional transparency.',
+                a: 'In an illustrative 1,000-student mess scenario, preventing 15%–25% of daily overprepared plates helps eliminate avoidable leftover waste while improving weekly menu planning and student satisfaction.',
               },
             ].map((faq, idx) => (
               <RevealOnScroll key={faq.q} delayMs={idx * 70}>

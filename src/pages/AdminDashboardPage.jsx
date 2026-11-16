@@ -105,7 +105,7 @@ export default function AdminDashboardPage() {
     monthly_price_inr: 6999,
     student_limit: 1200,
     description: '',
-    featuresText: 'AI Demand Forecasting, Student Nutrition Portal, Inventory Alerts',
+    featuresText: 'Plate Demand Forecasting, Weekly Menu Planner, Attendance Polls',
   });
 
   // 6. Manual Invoice Payment Record form state
@@ -268,7 +268,7 @@ export default function AdminDashboardPage() {
       monthly_price_inr: 6999,
       student_limit: 1200,
       description: '',
-      featuresText: 'AI Demand Forecasting, Student Nutrition Portal',
+      featuresText: 'Plate Demand Forecasting, Weekly Menu Planner',
     });
   };
 
@@ -1778,7 +1778,7 @@ export default function AdminDashboardPage() {
                       Campus Adoption &amp; Active Student Usage
                     </h3>
                     <p className="text-xs text-slate-500">
-                      Active students using SmartBite meal selection &amp; nutrition tracking
+                      Active students using SmartBite weekly menus &amp; attendance polls
                     </p>
                   </div>
                   <div className="h-72 w-full">
@@ -1796,8 +1796,8 @@ export default function AdminDashboardPage() {
                           radius={[6, 6, 0, 0]}
                         />
                         <Bar
-                          dataKey="waste_saved_kg"
-                          name="Food Waste Saved (kg)"
+                          dataKey="wasteSavedPlates"
+                          name="Leftover Plates Saved"
                           fill="#d97706"
                           radius={[6, 6, 0, 0]}
                         />

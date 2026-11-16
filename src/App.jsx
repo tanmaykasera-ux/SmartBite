@@ -48,6 +48,10 @@ export default function App() {
           }
         />
         <Route
+          path="/mess-owner-dashboard/*"
+          element={<Navigate to="/mess-owner-dashboard" replace />}
+        />
+        <Route
           path="/mess-dashboard"
           element={<Navigate to="/mess-owner-dashboard" replace />}
         />
@@ -60,6 +64,10 @@ export default function App() {
               <StudentDashboardPage />
             </ProtectedRoute>
           }
+        />
+        <Route
+          path="/student-dashboard/*"
+          element={<Navigate to="/student-dashboard" replace />}
         />
 
         {/* Full-Screen SaaS Super Admin Console (Protected: super_admin ONLY) */}

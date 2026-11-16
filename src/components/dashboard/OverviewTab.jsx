@@ -49,7 +49,6 @@ export default function OverviewTab({ onNavigateTab }) {
     attendanceResponses,
     forecasts,
     wasteAnalytics,
-    inventoryIntelligence,
     smartRecommendations,
     weeklySeries,
     regenerateMessJoinCode,
@@ -295,7 +294,7 @@ export default function OverviewTab({ onNavigateTab }) {
           </p>
           <div className="flex items-center justify-between text-xs">
             <span className="text-slate-500">
-              {inventoryIntelligence.lowStockAlerts.length} low-stock alerts
+              Rate: ₹{Number(messProfile.cost_per_plate || 65)}/plate
             </span>
             <button
               type="button"
@@ -560,9 +559,6 @@ export default function OverviewTab({ onNavigateTab }) {
                         className="flex items-center justify-between"
                       >
                         <span className="truncate pr-2">• {item.name}</span>
-                        <span className="font-semibold text-slate-700 shrink-0">
-                          {item.calories} kcal
-                        </span>
                       </li>
                     ))}
                   </ul>
@@ -600,7 +596,7 @@ export default function OverviewTab({ onNavigateTab }) {
         </div>
       </Card>
 
-      {/* Bottom Row: Operational Recommendations & Inventory Alerts */}
+      {/* Bottom Row: Operational Recommendations */}
       {smartRecommendations.length > 0 && (
         <Card className="p-5 space-y-4">
           <div className="flex items-center justify-between">

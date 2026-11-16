@@ -1,12 +1,11 @@
-import React, { useState, useMemo } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import React, { useState, useMemo, useEffect } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Leaf,
   LayoutDashboard,
   UtensilsCrossed,
   CalendarDays,
   CheckSquare,
-  Flame,
   History,
   MessageSquarePlus,
   Bell,
@@ -24,7 +23,6 @@ import {
   UserMinus,
   RotateCcw,
   Lock,
-  Salad,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useData } from '../context/DataContext';
@@ -48,12 +46,13 @@ const STUDENT_TABS = [
   { id: 'today_menu', label: 'Today’s Menu', icon: UtensilsCrossed },
   { id: 'week_menu', label: 'This Week’s Menu', icon: CalendarDays },
   { id: 'meal_attendance', label: 'Meal Attendance', icon: CheckSquare },
-  { id: 'nutrition_tracker', label: 'Nutrition', icon: Flame },
   { id: 'meal_history', label: 'Meal History', icon: History },
   { id: 'feedback', label: 'Feedback', icon: MessageSquarePlus },
   { id: 'notifications', label: 'Notifications', icon: Bell },
   { id: 'profile', label: 'My Profile', icon: UserCircle },
 ];
+
+const validStudentTabIds = new Set(STUDENT_TABS.map((t) => t.id));
 
 export default function StudentDashboardPage() {
   const { user, logout, isDemoMode, linkStudentToMessByCode } = useAuth();
@@ -73,11 +72,25 @@ export default function StudentDashboardPage() {
     refreshFromSupabase,
   } = useData();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const [activeTab, setActiveTab] = useState('overview');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [toast, setToast] = useState('');
   const [toastType, setToastType] = useState('success');
+
+  // Redirect any unrecognised or legacy tab query parameter cleanly to overview
+  useEffect(() => {
+    const tabParam = searchParams.get('tab');
+    if (tabParam) {
+      if (validStudentTabIds.has(tabParam)) {
+        setActiveTab(tabParam);
+      } else {
+        setActiveTab('overview');
+        setSearchParams({}, { replace: true });
+      }
+    }
+  }, [searchParams, setSearchParams]);
 
   // Join Mess Code state if student has not linked a mess yet
   const [joinCodeInput, setJoinCodeInput] = useState('');
@@ -122,6 +135,10 @@ export default function StudentDashboardPage() {
 
   // Profile form state
   const [profileForm, setProfileForm] = useState(studentProfile);
+
+  useEffect(() => {
+    setProfileForm(studentProfile);
+  }, [studentProfile]);
 
   const showToast = (msg, type = 'success') => {
     setToast(msg);
@@ -202,51 +219,6 @@ export default function StudentDashboardPage() {
     }
   };
 
-  // Standard Plate Nutrition Estimate for Today (summing standard plate macros of meals the student is attending today)
-  const todayNutritionEstimate = useMemo(() => {
-    let calories = 0;
-    let protein = 0;
-    let carbs = 0;
-    let fats = 0;
-    const mealBreakdowns = [];
-
-    ['breakfast', 'lunch', 'dinner'].forEach((mType) => {
-      const menu = getPublishedMenu(todayStr, mType);
-      const att = getStudentAttendanceStatus(todayStr, mType);
-      const items = menu?.items || [];
-      const mCals = items.reduce((s, d) => s + Number(d.calories || 0), 0);
-      const mProt = items.reduce((s, d) => s + Number(d.protein || 0), 0);
-      const mCarbs = items.reduce((s, d) => s + Number(d.carbs || 0), 0);
-      const mFats = items.reduce((s, d) => s + Number(d.fats || 0), 0);
-
-      if (att.willAttend && menu) {
-        calories += mCals;
-        protein += mProt;
-        carbs += mCarbs;
-        fats += mFats;
-      }
-
-      mealBreakdowns.push({
-        mealType: mType,
-        label: mType.charAt(0).toUpperCase() + mType.slice(1),
-        menu,
-        willAttend: att.willAttend,
-        calories: mCals,
-        protein: Number(mProt.toFixed(1)),
-        carbs: Number(mCarbs.toFixed(1)),
-        fats: Number(mFats.toFixed(1)),
-      });
-    });
-
-    return {
-      calories: Math.round(calories),
-      protein: Math.round(protein * 10) / 10,
-      carbs: Math.round(carbs * 10) / 10,
-      fats: Math.round(fats * 10) / 10,
-      mealBreakdowns,
-    };
-  }, [menus, studentSelectionsMap, todayStr]);
-
   const nextActivePoll = useMemo(
     () => getNextActivePollMeal(messProfile),
     [messProfile]
@@ -278,12 +250,16 @@ export default function StudentDashboardPage() {
   const handleProfileSave = async (e) => {
     e.preventDefault();
     await updateStudentProfile(profileForm);
-    showToast('Student profile & nutrition preferences updated!');
+    showToast('Student profile & preferences updated!');
   };
 
   const unreadCount = notifications.filter((n) => !n.is_read).length;
   const activeTabMeta =
     STUDENT_TABS.find((t) => t.id === activeTab) || STUDENT_TABS[0];
+
+  const publishedTodayCount = ['breakfast', 'lunch', 'dinner'].filter((m) =>
+    Boolean(getPublishedMenu(todayStr, m))
+  ).length;
 
   return (
     <div className="min-h-screen flex bg-cream-50 text-slate-900">
@@ -594,16 +570,13 @@ export default function StudentDashboardPage() {
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <Card className="p-5 space-y-1">
                   <span className="text-xs text-slate-500 font-semibold">
-                    Today’s Standard Plate Estimate
+                    Today’s Published Meals
                   </span>
                   <p className="text-2xl font-extrabold text-slate-900">
-                    {todayNutritionEstimate.calories} kcal{' '}
-                    <span className="text-xs font-normal text-slate-500">
-                      / {studentProfile.daily_calorie_goal} kcal goal
-                    </span>
+                    {publishedTodayCount} / 3 Meals Published
                   </p>
                   <p className="text-xs text-brand-700 font-bold">
-                    {todayNutritionEstimate.protein}g Protein • Estimate based on standard plate
+                    Fixed mess menu for {formatHumanDate(todayStr)}
                   </p>
                 </Card>
 
@@ -667,13 +640,6 @@ export default function StudentDashboardPage() {
                     );
                     const att = getStudentAttendanceStatus(todayStr, mealType);
                     const items = menu?.items || [];
-                    const mealCals = items.reduce(
-                      (s, i) => s + Number(i.calories || 0),
-                      0
-                    );
-                    const mealProt = items
-                      .reduce((s, i) => s + Number(i.protein || 0), 0)
-                      .toFixed(1);
 
                     return (
                       <div
@@ -717,20 +683,12 @@ export default function StudentDashboardPage() {
                                 {items.map((item) => (
                                   <li
                                     key={item.id}
-                                    className="flex justify-between"
+                                    className="truncate"
                                   >
-                                    <span className="truncate pr-2">
-                                      • {item.name}
-                                    </span>
-                                    <span className="font-semibold text-slate-700 shrink-0">
-                                      {item.calories} kcal
-                                    </span>
+                                    • {item.name}
                                   </li>
                                 ))}
                               </ul>
-                              <p className="text-[11px] font-bold text-brand-800 pt-1">
-                                Standard Plate: {mealCals} kcal • {mealProt}g Protein
-                              </p>
                             </div>
                           ) : (
                             <p className="text-xs text-slate-500 italic py-2">
@@ -800,7 +758,7 @@ export default function StudentDashboardPage() {
                     Today’s Breakfast, Lunch &amp; Dinner Menu
                   </h2>
                   <p className="text-xs text-slate-600">
-                    Showing published dishes and owner-verified nutrition per standard plate for your mess.
+                    Showing published dishes for your hostel mess today.
                   </p>
                 </div>
                 <Button
@@ -815,13 +773,6 @@ export default function StudentDashboardPage() {
               {['breakfast', 'lunch', 'dinner'].map((mealType) => {
                 const menu = getPublishedMenu(todayStr, mealType);
                 const items = menu?.items || [];
-                const totalCals = items.reduce(
-                  (s, i) => s + Number(i.calories || 0),
-                  0
-                );
-                const totalProt = items
-                  .reduce((s, i) => s + Number(i.protein || 0), 0)
-                  .toFixed(1);
 
                 return (
                   <Card key={mealType} className="p-5 space-y-4">
@@ -841,7 +792,7 @@ export default function StudentDashboardPage() {
                       </div>
                       {menu && items.length > 0 && (
                         <Badge variant="green">
-                          Standard Plate: {totalCals} kcal • {totalProt}g Protein
+                          {items.length} Dish{items.length === 1 ? '' : 'es'} Published
                         </Badge>
                       )}
                     </div>
@@ -869,47 +820,12 @@ export default function StudentDashboardPage() {
                                 className="h-36 w-full object-cover"
                               />
                               <div className="p-4 space-y-2">
-                                <div className="flex items-start justify-between gap-2">
-                                  <h4 className="text-sm font-bold text-slate-900">
-                                    {dish.name}
-                                  </h4>
-                                  <span className="text-[11px] font-semibold text-brand-800 bg-brand-50 px-2 py-0.5 rounded-md shrink-0">
-                                    {dish.serving_size || '1 Plate'}
-                                  </span>
-                                </div>
+                                <h4 className="text-sm font-bold text-slate-900">
+                                  {dish.name}
+                                </h4>
                                 <p className="text-xs text-slate-500">
                                   {dish.description}
                                 </p>
-                              </div>
-                            </div>
-                            <div className="p-3 bg-cream-50 border-t border-slate-100 grid grid-cols-4 text-center text-xs">
-                              <div>
-                                <span className="block text-[10px] text-slate-400">
-                                  KCAL
-                                </span>
-                                <strong className="text-slate-900">
-                                  {dish.calories}
-                                </strong>
-                              </div>
-                              <div>
-                                <span className="block text-[10px] text-slate-400">
-                                  PROT
-                                </span>
-                                <strong className="text-brand-800">
-                                  {dish.protein}g
-                                </strong>
-                              </div>
-                              <div>
-                                <span className="block text-[10px] text-slate-400">
-                                  CARBS
-                                </span>
-                                <strong>{dish.carbs}g</strong>
-                              </div>
-                              <div>
-                                <span className="block text-[10px] text-slate-400">
-                                  FATS
-                                </span>
-                                <strong>{dish.fats}g</strong>
                               </div>
                             </div>
                           </div>
@@ -936,7 +852,7 @@ export default function StudentDashboardPage() {
                       Week of {weekDays[0]?.humanDate} – {weekDays[6]?.humanDate}
                     </h2>
                     <p className="text-xs text-slate-500">
-                      View the published Breakfast, Lunch, and Dinner menu and standard plate nutrition across the week.
+                      View the published Breakfast, Lunch, and Dinner menu across the week.
                     </p>
                   </div>
 
@@ -1022,13 +938,6 @@ export default function StudentDashboardPage() {
                               mealType
                             );
                             const dishes = pubMenu?.items || [];
-                            const totalCals = dishes.reduce(
-                              (s, d) => s + Number(d.calories || 0),
-                              0
-                            );
-                            const totalProt = dishes
-                              .reduce((s, d) => s + Number(d.protein || 0), 0)
-                              .toFixed(1);
 
                             return (
                               <td
@@ -1050,9 +959,6 @@ export default function StudentDashboardPage() {
                                         </li>
                                       ))}
                                     </ul>
-                                    <p className="text-[10px] font-bold text-brand-700 pt-1 border-t border-slate-100">
-                                      {totalCals} kcal • {totalProt}g P
-                                    </p>
                                   </div>
                                 ) : (
                                   <p className="text-[11px] text-slate-400 italic">
@@ -1266,154 +1172,19 @@ export default function StudentDashboardPage() {
             </div>
           )}
 
-          {/* ================= 5. NUTRITION TRACKER (STANDARD PLATE ESTIMATE) ================= */}
-          {activeTab === 'nutrition_tracker' && (
-            <div className="space-y-6">
-              <Card className="p-5 bg-brand-50 border-brand-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div className="flex items-start gap-3">
-                  <Salad className="w-5 h-5 text-brand-800 shrink-0 mt-0.5" />
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h2 className="text-base font-extrabold text-brand-950">
-                        Daily Nutrition Tracker — Estimate Based on the Standard Plate
-                      </h2>
-                      <Badge variant="green">
-                        Estimate based on the standard plate
-                      </Badge>
-                    </div>
-                    <p className="text-xs text-brand-900 mt-1">
-                      Calculated automatically from the owner-verified standard plate nutrition of the meals you are attending today (not marked &ldquo;not coming&rdquo;).
-                    </p>
-                  </div>
-                </div>
-              </Card>
-
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                <Card className="p-5 text-center space-y-1">
-                  <span className="text-xs font-bold text-slate-500 uppercase">
-                    Estimated Calories
-                  </span>
-                  <p className="text-3xl font-extrabold text-brand-900">
-                    {todayNutritionEstimate.calories}
-                  </p>
-                  <p className="text-xs text-slate-500">
-                    Goal: {studentProfile.daily_calorie_goal} kcal
-                  </p>
-                </Card>
-                <Card className="p-5 text-center space-y-1">
-                  <span className="text-xs font-bold text-slate-500 uppercase">
-                    Protein
-                  </span>
-                  <p className="text-3xl font-extrabold text-brand-700">
-                    {todayNutritionEstimate.protein}g
-                  </p>
-                  <p className="text-xs text-slate-500">
-                    Standard plate total
-                  </p>
-                </Card>
-                <Card className="p-5 text-center space-y-1">
-                  <span className="text-xs font-bold text-slate-500 uppercase">
-                    Carbohydrates
-                  </span>
-                  <p className="text-3xl font-extrabold text-slate-900">
-                    {todayNutritionEstimate.carbs}g
-                  </p>
-                  <p className="text-xs text-slate-500">
-                    Standard plate total
-                  </p>
-                </Card>
-                <Card className="p-5 text-center space-y-1">
-                  <span className="text-xs font-bold text-slate-500 uppercase">
-                    Healthy Fats
-                  </span>
-                  <p className="text-3xl font-extrabold text-amber-700">
-                    {todayNutritionEstimate.fats}g
-                  </p>
-                  <p className="text-xs text-slate-500">
-                    Standard plate total
-                  </p>
-                </Card>
-              </div>
-
-              <Card className="p-6 space-y-4">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-base font-bold text-slate-900">
-                    Today’s Meal-by-Meal Standard Plate Breakdown ({formatHumanDate(todayStr)})
-                  </h3>
-                  <Badge variant="neutral">
-                    Estimate based on the standard plate
-                  </Badge>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  {todayNutritionEstimate.mealBreakdowns.map((mb) => (
-                    <div
-                      key={mb.mealType}
-                      className={`p-4 rounded-2xl border space-y-2 ${
-                        mb.willAttend
-                          ? 'bg-cream-50 border-slate-200'
-                          : 'bg-slate-50 border-slate-200 opacity-60'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-extrabold uppercase text-brand-900">
-                          {mb.label}
-                        </span>
-                        <Badge variant={mb.willAttend ? 'green' : 'red'}>
-                          {mb.willAttend ? 'Attending' : 'Skipped (Not Coming)'}
-                        </Badge>
-                      </div>
-                      <p className="text-xs font-bold text-slate-800">
-                        {mb.menu
-                          ? mb.menu.title
-                          : 'No published menu for this meal'}
-                      </p>
-                      <div className="grid grid-cols-4 gap-1 pt-2 border-t border-slate-200/70 text-center text-xs">
-                        <div>
-                          <span className="block text-[10px] text-slate-400">
-                            KCAL
-                          </span>
-                          <strong>{mb.willAttend ? mb.calories : 0}</strong>
-                        </div>
-                        <div>
-                          <span className="block text-[10px] text-slate-400">
-                            PROT
-                          </span>
-                          <strong>{mb.willAttend ? mb.protein : 0}g</strong>
-                        </div>
-                        <div>
-                          <span className="block text-[10px] text-slate-400">
-                            CARBS
-                          </span>
-                          <strong>{mb.willAttend ? mb.carbs : 0}g</strong>
-                        </div>
-                        <div>
-                          <span className="block text-[10px] text-slate-400">
-                            FATS
-                          </span>
-                          <strong>{mb.willAttend ? mb.fats : 0}g</strong>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </Card>
-            </div>
-          )}
-
-          {/* ================= 6. MEAL HISTORY ================= */}
+          {/* ================= 5. MEAL HISTORY ================= */}
           {activeTab === 'meal_history' && (
             <Card className="p-5 space-y-4">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                 <div>
                   <h3 className="text-base font-bold text-slate-900">
-                    My Past Meal Attendance &amp; Standard Plate Nutrition History
+                    My Past Meal Attendance History
                   </h3>
                   <p className="text-xs text-slate-500">
-                    Shows meals attended or skipped along with standard plate nutrition.
+                    Shows meals attended or skipped across your mess schedule.
                   </p>
                 </div>
-                <Badge variant="neutral">Standard Plate Macros</Badge>
+                <Badge variant="neutral">Attendance Log</Badge>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse text-xs">
@@ -1421,49 +1192,55 @@ export default function StudentDashboardPage() {
                     <tr className="border-b border-slate-200 text-slate-500 uppercase bg-cream-50">
                       <th className="py-3 px-3">Date</th>
                       <th className="py-3 px-3">Meal</th>
-                      <th className="py-3 px-3">Menu &amp; Standard Plate Dishes</th>
-                      <th className="py-3 px-3">Standard Plate Macros</th>
+                      <th className="py-3 px-3">Menu &amp; Dishes</th>
                       <th className="py-3 px-3">Attendance Status</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {studentMealHistory.map((h) => (
-                      <tr key={h.id} className="hover:bg-cream-50/60">
-                        <td className="py-3 px-3 font-medium text-slate-600">
-                          {formatHumanDate(h.meal_date)}
-                        </td>
-                        <td className="py-3 px-3 font-bold uppercase text-brand-800">
-                          {h.meal_type}
-                        </td>
-                        <td className="py-3 px-3 text-slate-800">
-                          {(h.dishes || h.selected_dishes || []).join(' • ')}
-                        </td>
-                        <td className="py-3 px-3 font-bold text-brand-900">
-                          {h.calories} kcal • {h.protein}g P • {h.carbs || 0}g C •{' '}
-                          {h.fats || 0}g F
-                        </td>
-                        <td className="py-3 px-3">
-                          <Badge
-                            variant={
-                              String(h.status || '')
-                                .toLowerCase()
-                                .includes('skip')
-                                ? 'red'
-                                : 'green'
-                            }
-                          >
-                            {h.status || 'Attended (Standard Plate)'}
-                          </Badge>
+                    {studentMealHistory.length === 0 ? (
+                      <tr>
+                        <td
+                          colSpan={4}
+                          className="py-8 text-center text-slate-500"
+                        >
+                          No past meal attendance history recorded yet.
                         </td>
                       </tr>
-                    ))}
+                    ) : (
+                      studentMealHistory.map((h) => (
+                        <tr key={h.id} className="hover:bg-cream-50/60">
+                          <td className="py-3 px-3 font-medium text-slate-600">
+                            {formatHumanDate(h.meal_date)}
+                          </td>
+                          <td className="py-3 px-3 font-bold uppercase text-brand-800">
+                            {h.meal_type}
+                          </td>
+                          <td className="py-3 px-3 text-slate-800">
+                            {(h.dishes || h.selected_dishes || []).join(' • ')}
+                          </td>
+                          <td className="py-3 px-3">
+                            <Badge
+                              variant={
+                                String(h.status || '')
+                                  .toLowerCase()
+                                  .includes('skip')
+                                  ? 'red'
+                                  : 'green'
+                              }
+                            >
+                              {h.status || 'Attended'}
+                            </Badge>
+                          </td>
+                        </tr>
+                      ))
+                    )}
                   </tbody>
                 </table>
               </div>
             </Card>
           )}
 
-          {/* ================= 7. FEEDBACK & COMPLAINTS ================= */}
+          {/* ================= 6. FEEDBACK & COMPLAINTS ================= */}
           {activeTab === 'feedback' && (
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
               <Card className="lg:col-span-5 p-5 space-y-4">
@@ -1614,7 +1391,7 @@ export default function StudentDashboardPage() {
             </div>
           )}
 
-          {/* ================= 8. NOTIFICATIONS ================= */}
+          {/* ================= 7. NOTIFICATIONS ================= */}
           {activeTab === 'notifications' && (
             <Card className="p-5 space-y-4">
               <div className="flex items-center justify-between">
@@ -1658,7 +1435,7 @@ export default function StudentDashboardPage() {
             </Card>
           )}
 
-          {/* ================= 9. STUDENT PROFILE ================= */}
+          {/* ================= 8. STUDENT PROFILE ================= */}
           {activeTab === 'profile' && (
             <Card className="p-6 max-w-2xl space-y-5">
               <div className="flex items-center justify-between pb-4 border-b border-slate-100">
@@ -1739,29 +1516,12 @@ export default function StudentDashboardPage() {
                       className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs bg-white font-semibold"
                     >
                       <option>Vegetarian</option>
-                      <option>High-Protein Veg</option>
                       <option>Jain</option>
                       <option>Eggetarian</option>
                       <option>Non-Vegetarian</option>
                       <option>Vegan</option>
                     </select>
                   </div>
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Daily Calorie Goal (kcal)
-                  </label>
-                  <input
-                    type="number"
-                    value={profileForm.daily_calorie_goal}
-                    onChange={(e) =>
-                      setProfileForm({
-                        ...profileForm,
-                        daily_calorie_goal: Number(e.target.value),
-                      })
-                    }
-                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold"
-                  />
                 </div>
                 <Button type="submit" variant="primary">
                   Save Student Profile

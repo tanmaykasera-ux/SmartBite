@@ -291,7 +291,7 @@ export default function ContactPage() {
                         <option>Institutional SaaS Inquiry</option>
                         <option>Multi-Hostel Enterprise Quote</option>
                         <option>Student Mess Council Partnership</option>
-                        <option>Nutritionist / Menu Audit</option>
+                        <option>Weekly Menu &amp; Attendance Poll Setup</option>
                         <option>Technical / Supabase Integration</option>
                       </select>
                     </div>

@@ -28,18 +28,17 @@ export default function Sidebar({
 }) {
   const operatorNavItems = [
     { id: 'overview', label: 'Demand & Waste Overview', icon: LayoutDashboard, badge: 'Live' },
-    { id: 'forecast', label: 'AI Batch Prep Calculator', icon: TrendingUp },
-    { id: 'menu-nutrition', label: 'Menu & Macro Planner', icon: Salad },
-    { id: 'entitlement', label: 'Student Poll & Buffer', icon: Users, badge: 'Protected' },
-    { id: 'feedback', label: 'Taste & Waste Feedback', icon: MessageSquareHeart },
-    { id: 'reports', label: 'ESG & Cost Reports', icon: FileSpreadsheet },
+    { id: 'forecast', label: 'Plate Demand Forecasting', icon: TrendingUp },
+    { id: 'menus', label: 'Weekly Menu Planner', icon: Utensils },
+    { id: 'entitlement', label: 'Attendance Polls', icon: Users, badge: 'Protected' },
+    { id: 'feedback', label: 'Student Feedback', icon: MessageSquareHeart },
+    { id: 'reports', label: 'Attendance Report', icon: FileSpreadsheet },
     { id: 'settings', label: 'Kitchen Settings', icon: Settings },
   ];
 
   const studentNavItems = [
-    { id: 'overview', label: 'Today’s Mess Menu', icon: Utensils, badge: 'Free' },
-    { id: 'entitlement', label: 'My Meal Preferences', icon: Users, badge: 'Guaranteed' },
-    { id: 'menu-nutrition', label: 'My Daily Nutrition & Macros', icon: Salad },
+    { id: 'overview', label: 'Today’s & Weekly Menu', icon: Utensils, badge: 'Free' },
+    { id: 'entitlement', label: 'Meal Attendance Polls', icon: Users, badge: 'Guaranteed' },
     { id: 'feedback', label: 'Rate Meals & Suggest', icon: MessageSquareHeart },
   ];
 

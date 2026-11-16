@@ -162,7 +162,7 @@ export default function DemandForecastingTab({ onNavigateTab }) {
             <p className="text-xs text-brand-100/90 max-w-3xl leading-relaxed">
               <strong>Expected Plates per Meal</strong> = Enrolled Students ({totalRegisteredStudents}) &minus; Marked &ldquo;Not Coming&rdquo; (Poll) &minus; Estimated Silent No-Shows (from historical actual plates served vs. expected) + Guest Buffer ({messProfile.guest_buffer_pct ?? messProfile.walk_in_buffer_pct ?? 5}%).
               <br />
-              <strong>Recommended Preparation (Plates)</strong> = Expected Plates + Safety Buffer ({messProfile.safety_buffer_pct ?? 5}%). Ingredient quantities in kg/L are derived from plates in Purchase Planning.
+              <strong>Recommended Preparation (Plates)</strong> = Expected Plates + Safety Buffer ({messProfile.safety_buffer_pct ?? 5}%).
             </p>
           </div>
 
@@ -186,9 +186,9 @@ export default function DemandForecastingTab({ onNavigateTab }) {
               <Button
                 size="sm"
                 variant="primary"
-                onClick={() => onNavigateTab('purchase')}
+                onClick={() => onNavigateTab('reports')}
               >
-                Purchase Planning (kg/L) →
+                Attendance Report →
               </Button>
             )}
           </div>

@@ -6,8 +6,6 @@ import {
   Send,
   Save,
   Clock,
-  Flame,
-  Salad,
   Utensils,
   CheckCircle2,
   X,
@@ -16,7 +14,6 @@ import {
   ChevronLeft,
   ChevronRight,
   Layers,
-  Scale,
 } from 'lucide-react';
 import { useData } from '../../context/DataContext';
 import {
@@ -38,14 +35,6 @@ const emptyDishForm = {
   description: '',
   image_url:
     'https://images.unsplash.com/photo-1546833999-b9f581a1996d?auto=format&fit=crop&w=500&q=80',
-  serving_size: '1 Standard Plate (180g)',
-  calories: 250,
-  protein: 12,
-  carbs: 32,
-  fats: 8,
-  ingredient_quantities: [
-    { name: 'Fresh Malai Paneer', quantity_per_plate: 60, unit: 'g' },
-  ],
 };
 
 export default function MenuManagementTab() {
@@ -228,67 +217,18 @@ export default function MenuManagementTab() {
     setDishForm({
       ...emptyDishForm,
       id: '',
-      ingredient_quantities: [
-        { name: '', quantity_per_plate: '', unit: 'g' },
-      ],
     });
     setDishModalOpen(true);
   };
 
   const openEditDish = (dish) => {
-    const structured =
-      Array.isArray(dish.ingredient_quantities) &&
-      dish.ingredient_quantities.length > 0
-        ? dish.ingredient_quantities.map((iq) => ({
-            name: iq.name || '',
-            quantity_per_plate:
-              iq.quantity_per_plate !== null &&
-              iq.quantity_per_plate !== undefined
-                ? iq.quantity_per_plate
-                : '',
-            unit: iq.unit || 'g',
-          }))
-        : Array.isArray(dish.ingredients) && dish.ingredients.length > 0
-        ? dish.ingredients.map((name) => ({
-            name: typeof name === 'string' ? name : name?.name || '',
-            quantity_per_plate: '',
-            unit: 'g',
-          }))
-        : [{ name: '', quantity_per_plate: '', unit: 'g' }];
-
     setDishForm({
-      ...dish,
-      ingredient_quantities: structured,
+      id: dish.id || '',
+      name: dish.name || dish.dish_name || '',
+      description: dish.description || '',
+      image_url: dish.image_url || emptyDishForm.image_url,
     });
     setDishModalOpen(true);
-  };
-
-  const handleAddIngredientRow = () => {
-    setDishForm((prev) => ({
-      ...prev,
-      ingredient_quantities: [
-        ...(prev.ingredient_quantities || []),
-        { name: '', quantity_per_plate: '', unit: 'g' },
-      ],
-    }));
-  };
-
-  const handleUpdateIngredientRow = (index, field, value) => {
-    setDishForm((prev) => ({
-      ...prev,
-      ingredient_quantities: (prev.ingredient_quantities || []).map((row, i) =>
-        i === index ? { ...row, [field]: value } : row
-      ),
-    }));
-  };
-
-  const handleRemoveIngredientRow = (index) => {
-    setDishForm((prev) => ({
-      ...prev,
-      ingredient_quantities: (prev.ingredient_quantities || []).filter(
-        (_, i) => i !== index
-      ),
-    }));
   };
 
   const handleDishSubmit = async (e) => {
@@ -308,14 +248,11 @@ export default function MenuManagementTab() {
       targetMenuId = created.id;
     }
 
-    const cleanIngRows = (dishForm.ingredient_quantities || []).filter((r) =>
-      String(r.name || '').trim()
-    );
-
     await addOrUpdateMenuItem(targetMenuId, {
-      ...dishForm,
-      ingredient_quantities: cleanIngRows,
-      ingredients: cleanIngRows.map((r) => String(r.name).trim()),
+      id: dishForm.id,
+      name: dishForm.name,
+      description: dishForm.description,
+      image_url: dishForm.image_url,
     });
     setDishModalOpen(false);
     showToast(
@@ -332,17 +269,6 @@ export default function MenuManagementTab() {
   };
 
   const items = currentMenu?.items || [];
-  const totalCalories = items.reduce((s, i) => s + Number(i.calories || 0), 0);
-  const totalProtein = items
-    .reduce((s, i) => s + Number(i.protein || 0), 0)
-    .toFixed(1);
-  const totalCarbs = items
-    .reduce((s, i) => s + Number(i.carbs || 0), 0)
-    .toFixed(1);
-  const totalFats = items
-    .reduce((s, i) => s + Number(i.fats || 0), 0)
-    .toFixed(1);
-
   const pollWin = computeMealPollWindow(selectedDate, selectedMeal, messProfile);
 
   return (
@@ -475,13 +401,7 @@ export default function MenuManagementTab() {
                       <div className="flex items-center justify-between gap-1">
                         <span className="font-extrabold">{day.shortDay}</span>
                         {day.isToday && (
-                          <span
-                            className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold uppercase ${
-                              isSelectedDay
-                                ? 'bg-brand-700 text-white'
-                                : 'bg-brand-700 text-white'
-                            }`}
-                          >
+                          <span className="text-[9px] px-1.5 py-0.5 rounded-full font-bold uppercase bg-brand-700 text-white">
                             Today
                           </span>
                         )}
@@ -547,11 +467,7 @@ export default function MenuManagementTab() {
                           )}
                           {dishList.length > 0 && (
                             <span className="text-[10px] font-semibold text-slate-500">
-                              {dishList.reduce(
-                                (s, d) => s + Number(d.calories || 0),
-                                0
-                              )}{' '}
-                              kcal
+                              {dishList.length} dish{dishList.length === 1 ? '' : 'es'}
                             </span>
                           )}
                         </div>
@@ -676,170 +592,64 @@ export default function MenuManagementTab() {
             />
           </div>
         </div>
-
-        {/* Standard Plate Macro Summary Bar */}
-        <div className="p-3.5 rounded-xl bg-brand-50/70 border border-brand-200/80 flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2 text-xs font-bold text-brand-900">
-            <Salad className="w-4 h-4 text-brand-700" />
-            <span>
-              Standard Plate Nutrition (Owner Verified • {items.length} Dish
-              {items.length === 1 ? '' : 'es'}):
-            </span>
-          </div>
-          <div className="flex flex-wrap items-center gap-4 text-xs">
-            <span className="font-bold text-slate-800">
-              Calories: <strong className="text-brand-800">{totalCalories} kcal</strong>
-            </span>
-            <span className="font-bold text-slate-800">
-              Protein: <strong className="text-brand-800">{totalProtein}g</strong>
-            </span>
-            <span className="font-bold text-slate-800">
-              Carbs: <strong className="text-brand-800">{totalCarbs}g</strong>
-            </span>
-            <span className="font-bold text-slate-800">
-              Fats: <strong className="text-brand-800">{totalFats}g</strong>
-            </span>
-          </div>
-        </div>
       </Card>
 
       {/* Dish Cards Grid for Selected Slot */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-        {items.map((dish) => {
-          const ingQuants = Array.isArray(dish.ingredient_quantities)
-            ? dish.ingredient_quantities
-            : [];
-          return (
-            <Card
-              key={dish.id}
-              className="overflow-hidden flex flex-col justify-between p-0"
-            >
-              <div>
-                <div className="relative h-40 w-full bg-slate-100 overflow-hidden">
-                  <img
-                    src={dish.image_url}
-                    alt={dish.name}
-                    className="w-full h-full object-cover"
-                  />
-                  <div className="absolute top-3 left-3">
-                    <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-slate-900/80 text-white backdrop-blur-xs">
-                      {dish.serving_size || '1 Standard Plate'}
-                    </span>
-                  </div>
-                  <div className="absolute top-3 right-3 flex items-center gap-1.5">
-                    <button
-                      type="button"
-                      onClick={() => openEditDish(dish)}
-                      className="p-1.5 rounded-lg bg-white/90 hover:bg-white text-slate-800 shadow-xs"
-                      title="Edit Dish"
-                    >
-                      <Edit3 className="w-3.5 h-3.5" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleDeleteDish(dish.id, dish.name)}
-                      className="p-1.5 rounded-lg bg-white/90 hover:bg-rose-50 text-rose-600 shadow-xs"
-                      title="Delete Dish"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
+        {items.map((dish) => (
+          <Card
+            key={dish.id}
+            className="overflow-hidden flex flex-col justify-between p-0"
+          >
+            <div>
+              <div className="relative h-44 w-full bg-slate-100 overflow-hidden">
+                <img
+                  src={dish.image_url}
+                  alt={dish.name}
+                  className="w-full h-full object-cover"
+                />
+                <div className="absolute top-3 left-3">
+                  <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-slate-900/80 text-white backdrop-blur-xs inline-flex items-center gap-1">
+                    <Utensils className="w-3 h-3" /> Fixed Menu Dish
+                  </span>
                 </div>
-
-                <div className="p-4 space-y-3">
-                  <div>
-                    <h4 className="text-sm font-bold text-slate-900">
-                      {dish.name}
-                    </h4>
-                    <p className="text-xs text-slate-500 mt-1 line-clamp-2">
-                      {dish.description}
-                    </p>
-                  </div>
-
-                  {/* Standard Plate Macros */}
-                  <div className="grid grid-cols-4 gap-1.5 p-2.5 rounded-xl bg-cream-50 border border-slate-200/70 text-center">
-                    <div>
-                      <p className="text-[10px] text-slate-400 font-semibold">
-                        KCAL
-                      </p>
-                      <p className="text-xs font-extrabold text-slate-900">
-                        {dish.calories}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] text-slate-400 font-semibold">
-                        PROT
-                      </p>
-                      <p className="text-xs font-extrabold text-brand-800">
-                        {dish.protein}g
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] text-slate-400 font-semibold">
-                        CARBS
-                      </p>
-                      <p className="text-xs font-extrabold text-slate-800">
-                        {dish.carbs}g
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] text-slate-400 font-semibold">
-                        FATS
-                      </p>
-                      <p className="text-xs font-extrabold text-slate-800">
-                        {dish.fats}g
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Ingredients & Quantity per Plate */}
-                  <div className="space-y-1.5">
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1">
-                      <Scale className="w-3 h-3 text-brand-700" />
-                      <span>Ingredients per Plate (for Purchase Planning)</span>
-                    </p>
-                    {ingQuants.length > 0 ? (
-                      <div className="flex flex-wrap gap-1">
-                        {ingQuants.map((iq, idx) => (
-                          <span
-                            key={idx}
-                            className={`px-2 py-0.5 rounded-md text-[10px] font-semibold border ${
-                              iq.quantity_per_plate
-                                ? 'bg-brand-50 text-brand-900 border-brand-200'
-                                : 'bg-amber-50 text-amber-800 border-amber-200'
-                            }`}
-                          >
-                            {iq.name}
-                            {iq.quantity_per_plate
-                              ? `: ${iq.quantity_per_plate}${iq.unit || 'g'}/plate`
-                              : ' (Add qty/plate)'}
-                          </span>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="flex flex-wrap gap-1">
-                        {(dish.ingredients || []).map((ing, idx) => (
-                          <span
-                            key={idx}
-                            className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 text-[10px] font-medium"
-                          >
-                            {ing}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                  </div>
+                <div className="absolute top-3 right-3 flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => openEditDish(dish)}
+                    className="p-1.5 rounded-lg bg-white/90 hover:bg-white text-slate-800 shadow-xs"
+                    title="Edit Dish"
+                  >
+                    <Edit3 className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteDish(dish.id, dish.name)}
+                    className="p-1.5 rounded-lg bg-white/90 hover:bg-rose-50 text-rose-600 shadow-xs"
+                    title="Delete Dish"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
                 </div>
               </div>
-            </Card>
-          );
-        })}
+
+              <div className="p-4 space-y-2">
+                <h4 className="text-sm font-bold text-slate-900">
+                  {dish.name}
+                </h4>
+                <p className="text-xs text-slate-500 leading-relaxed">
+                  {dish.description || 'Included in the fixed meal thali for all enrolled students.'}
+                </p>
+              </div>
+            </div>
+          </Card>
+        ))}
 
         {/* Add Dish Card */}
         <button
           type="button"
           onClick={openAddDish}
-          className="min-h-[260px] rounded-2xl border-2 border-dashed border-slate-300 hover:border-brand-600 bg-cream-50/50 hover:bg-brand-50/30 flex flex-col items-center justify-center p-6 text-center transition-all group cursor-pointer"
+          className="min-h-[240px] rounded-2xl border-2 border-dashed border-slate-300 hover:border-brand-600 bg-cream-50/50 hover:bg-brand-50/30 flex flex-col items-center justify-center p-6 text-center transition-all group cursor-pointer"
         >
           <div className="w-12 h-12 rounded-2xl bg-brand-100 text-brand-800 flex items-center justify-center mb-3 group-hover:scale-105 transition-transform">
             <Plus className="w-6 h-6" />
@@ -848,7 +658,7 @@ export default function MenuManagementTab() {
             Add Dish to {selectedMeal.charAt(0).toUpperCase() + selectedMeal.slice(1)} ({formatHumanDate(selectedDate)})
           </p>
           <p className="text-xs text-slate-500 mt-1 max-w-xs">
-            Enter dish name, standard plate nutrition, and ingredient quantities per plate (`g`, `ml`, or `pieces`).
+            Enter dish name, description, and image for the weekly menu schedule.
           </p>
         </button>
       </div>
@@ -914,14 +724,14 @@ export default function MenuManagementTab() {
       {/* Add / Edit Dish Modal */}
       {dishModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-xs p-4 overflow-y-auto">
-          <Card className="w-full max-w-2xl p-6 space-y-5 bg-white my-8 max-h-[92vh] overflow-y-auto">
+          <Card className="w-full max-w-lg p-6 space-y-5 bg-white my-8">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
               <div>
                 <h3 className="text-base font-bold text-slate-900">
-                  {dishForm.id ? 'Edit Dish & Plate Ingredients' : 'Add Dish to Fixed Menu'}
+                  {dishForm.id ? 'Edit Dish' : 'Add Dish to Fixed Menu'}
                 </h3>
                 <p className="text-xs text-slate-500">
-                  {formatHumanDate(selectedDate)} • {selectedMeal.toUpperCase()} • Enter verified nutrition per standard plate
+                  {formatHumanDate(selectedDate)} • {selectedMeal.toUpperCase()}
                 </p>
               </div>
               <button
@@ -934,37 +744,20 @@ export default function MenuManagementTab() {
             </div>
 
             <form onSubmit={handleDishSubmit} className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Dish Name *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={dishForm.name}
-                    onChange={(e) =>
-                      setDishForm({ ...dishForm, name: e.target.value })
-                    }
-                    placeholder="e.g., Palak Paneer / Methi Chaman"
-                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Standard Plate Serving Size *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={dishForm.serving_size}
-                    onChange={(e) =>
-                      setDishForm({ ...dishForm, serving_size: e.target.value })
-                    }
-                    placeholder="e.g., 1 Bowl (180g)"
-                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold"
-                  />
-                </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Dish Name *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={dishForm.name}
+                  onChange={(e) =>
+                    setDishForm({ ...dishForm, name: e.target.value })
+                  }
+                  placeholder="e.g., Palak Paneer / Methi Chaman"
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold"
+                />
               </div>
 
               <div>
@@ -972,7 +765,7 @@ export default function MenuManagementTab() {
                   Description
                 </label>
                 <textarea
-                  rows={2}
+                  rows={3}
                   value={dishForm.description}
                   onChange={(e) =>
                     setDishForm({ ...dishForm, description: e.target.value })
@@ -994,182 +787,6 @@ export default function MenuManagementTab() {
                   }
                   className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs"
                 />
-              </div>
-
-              {/* Standard Plate Nutrition (Entered/Verified by Owner) */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                  Nutrition per Standard Plate (Owner Verified)
-                </label>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                  <div>
-                    <label className="block text-[11px] font-bold text-slate-600 mb-1">
-                      Calories (kcal)
-                    </label>
-                    <input
-                      type="number"
-                      min="0"
-                      required
-                      value={dishForm.calories}
-                      onChange={(e) =>
-                        setDishForm({
-                          ...dishForm,
-                          calories: Number(e.target.value),
-                        })
-                      }
-                      className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[11px] font-bold text-slate-600 mb-1">
-                      Protein (g)
-                    </label>
-                    <input
-                      type="number"
-                      step="0.5"
-                      min="0"
-                      required
-                      value={dishForm.protein}
-                      onChange={(e) =>
-                        setDishForm({
-                          ...dishForm,
-                          protein: Number(e.target.value),
-                        })
-                      }
-                      className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[11px] font-bold text-slate-600 mb-1">
-                      Carbs (g)
-                    </label>
-                    <input
-                      type="number"
-                      step="0.5"
-                      min="0"
-                      required
-                      value={dishForm.carbs}
-                      onChange={(e) =>
-                        setDishForm({
-                          ...dishForm,
-                          carbs: Number(e.target.value),
-                        })
-                      }
-                      className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[11px] font-bold text-slate-600 mb-1">
-                      Fats (g)
-                    </label>
-                    <input
-                      type="number"
-                      step="0.5"
-                      min="0"
-                      required
-                      value={dishForm.fats}
-                      onChange={(e) =>
-                        setDishForm({
-                          ...dishForm,
-                          fats: Number(e.target.value),
-                        })
-                      }
-                      className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Structured Ingredients with Quantity per Plate */}
-              <div className="space-y-2 pt-2 border-t border-slate-100">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-800">
-                      Ingredients &amp; Quantity per Plate (g, ml, or pieces)
-                    </label>
-                    <p className="text-[11px] text-slate-500">
-                      Used in Purchase Planning: weekly occurrences × expected plates × quantity per plate.
-                    </p>
-                  </div>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="secondary"
-                    icon={Plus}
-                    onClick={handleAddIngredientRow}
-                  >
-                    Add Ingredient
-                  </Button>
-                </div>
-
-                <div className="space-y-2">
-                  {(dishForm.ingredient_quantities || []).map((row, idx) => (
-                    <div
-                      key={idx}
-                      className="grid grid-cols-12 gap-2 items-center"
-                    >
-                      <div className="col-span-6">
-                        <input
-                          type="text"
-                          value={row.name}
-                          onChange={(e) =>
-                            handleUpdateIngredientRow(
-                              idx,
-                              'name',
-                              e.target.value
-                            )
-                          }
-                          placeholder="Ingredient name (e.g., Fresh Malai Paneer)"
-                          className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold"
-                        />
-                      </div>
-                      <div className="col-span-3">
-                        <input
-                          type="number"
-                          step="0.1"
-                          min="0"
-                          value={row.quantity_per_plate}
-                          onChange={(e) =>
-                            handleUpdateIngredientRow(
-                              idx,
-                              'quantity_per_plate',
-                              e.target.value
-                            )
-                          }
-                          placeholder="Qty / plate"
-                          className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold"
-                        />
-                      </div>
-                      <div className="col-span-2">
-                        <select
-                          value={row.unit || 'g'}
-                          onChange={(e) =>
-                            handleUpdateIngredientRow(
-                              idx,
-                              'unit',
-                              e.target.value
-                            )
-                          }
-                          className="w-full rounded-xl border border-slate-200 px-2 py-2 text-xs font-bold bg-white"
-                        >
-                          <option value="g">g</option>
-                          <option value="ml">ml</option>
-                          <option value="pieces">pieces</option>
-                        </select>
-                      </div>
-                      <div className="col-span-1 flex justify-end">
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveIngredientRow(idx)}
-                          className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600"
-                          title="Remove Ingredient"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
               </div>
 
               <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">

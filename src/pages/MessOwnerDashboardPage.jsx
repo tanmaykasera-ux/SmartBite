@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Leaf,
   LayoutDashboard,
@@ -7,10 +7,7 @@ import {
   Users,
   BrainCircuit,
   TrendingDown,
-  Package,
-  ClipboardList,
   MessageSquareHeart,
-  Salad,
   FileSpreadsheet,
   Settings,
   Bell,
@@ -32,10 +29,7 @@ import MenuManagementTab from '../components/dashboard/MenuManagementTab';
 import StudentSelectionsTab from '../components/dashboard/StudentSelectionsTab';
 import DemandForecastingTab from '../components/dashboard/DemandForecastingTab';
 import FoodWasteTab from '../components/dashboard/FoodWasteTab';
-import InventoryTab from '../components/dashboard/InventoryTab';
-import PurchasePlanningTab from '../components/dashboard/PurchasePlanningTab';
 import StudentFeedbackTab from '../components/dashboard/StudentFeedbackTab';
-import NutritionAnalyticsTab from '../components/dashboard/NutritionAnalyticsTab';
 import ReportsTab from '../components/dashboard/ReportsTab';
 import SettingsTab from '../components/dashboard/SettingsTab';
 
@@ -45,15 +39,15 @@ const sidebarModules = [
   { id: 'selections', label: 'Attendance Polls', icon: Users },
   { id: 'forecasting', label: 'Demand Forecasting', icon: BrainCircuit },
   { id: 'waste', label: 'Food Waste', icon: TrendingDown },
-  { id: 'inventory', label: 'Inventory', icon: Package },
-  { id: 'purchase', label: 'Purchase Planning', icon: ClipboardList },
   { id: 'feedback', label: 'Student Feedback', icon: MessageSquareHeart },
-  { id: 'nutrition', label: 'Nutrition Analytics', icon: Salad },
   { id: 'reports', label: 'Reports', icon: FileSpreadsheet },
   { id: 'settings', label: 'Settings', icon: Settings },
 ];
 
+const validTabIds = new Set(sidebarModules.map((m) => m.id));
+
 export default function MessOwnerDashboardPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState('overview');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
@@ -69,6 +63,23 @@ export default function MessOwnerDashboardPage() {
   } = useData();
   const navigate = useNavigate();
 
+  // Redirect any unrecognised or legacy tab query parameter cleanly to overview
+  useEffect(() => {
+    const tabParam = searchParams.get('tab');
+    if (tabParam) {
+      if (validTabIds.has(tabParam)) {
+        setActiveTab(tabParam);
+      } else {
+        setActiveTab('overview');
+        setSearchParams({}, { replace: true });
+      }
+    }
+  }, [searchParams, setSearchParams]);
+
+  const handleSelectTab = (tabId) => {
+    setActiveTab(validTabIds.has(tabId) ? tabId : 'overview');
+  };
+
   const unreadCount = notifications.filter((n) => !n.is_read).length;
   const activeModuleMeta =
     sidebarModules.find((m) => m.id === activeTab) || sidebarModules[0];
@@ -81,29 +92,23 @@ export default function MessOwnerDashboardPage() {
   const renderActiveContent = () => {
     switch (activeTab) {
       case 'overview':
-        return <OverviewTab onNavigateTab={setActiveTab} />;
+        return <OverviewTab onNavigateTab={handleSelectTab} />;
       case 'menus':
-        return <MenuManagementTab onNavigateTab={setActiveTab} />;
+        return <MenuManagementTab onNavigateTab={handleSelectTab} />;
       case 'selections':
-        return <StudentSelectionsTab onNavigateTab={setActiveTab} />;
+        return <StudentSelectionsTab onNavigateTab={handleSelectTab} />;
       case 'forecasting':
-        return <DemandForecastingTab onNavigateTab={setActiveTab} />;
+        return <DemandForecastingTab onNavigateTab={handleSelectTab} />;
       case 'waste':
-        return <FoodWasteTab onNavigateTab={setActiveTab} />;
-      case 'inventory':
-        return <InventoryTab onNavigateTab={setActiveTab} />;
-      case 'purchase':
-        return <PurchasePlanningTab onNavigateTab={setActiveTab} />;
+        return <FoodWasteTab onNavigateTab={handleSelectTab} />;
       case 'feedback':
-        return <StudentFeedbackTab onNavigateTab={setActiveTab} />;
-      case 'nutrition':
-        return <NutritionAnalyticsTab onNavigateTab={setActiveTab} />;
+        return <StudentFeedbackTab onNavigateTab={handleSelectTab} />;
       case 'reports':
-        return <ReportsTab onNavigateTab={setActiveTab} />;
+        return <ReportsTab onNavigateTab={handleSelectTab} />;
       case 'settings':
-        return <SettingsTab onNavigateTab={setActiveTab} />;
+        return <SettingsTab onNavigateTab={handleSelectTab} />;
       default:
-        return <OverviewTab onNavigateTab={setActiveTab} />;
+        return <OverviewTab onNavigateTab={handleSelectTab} />;
     }
   };
 

@@ -52,7 +52,7 @@ export default function Footer() {
               <CheckCircle2 className="w-4 h-4 text-brand-400" /> Built for Mess Operators
             </span>
             <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-brand-900/80 border border-brand-800">
-              <CheckCircle2 className="w-4 h-4 text-brand-400" /> ICMR-NIN Macro Aligned
+              <CheckCircle2 className="w-4 h-4 text-brand-400" /> Weekly Menu &amp; Plate Polls
             </span>
           </div>
         </div>
@@ -79,7 +79,7 @@ export default function Footer() {
             </Link>
 
             <p className="text-sm text-brand-200/85 max-w-md leading-relaxed">
-              SmartBite is an AI-powered food management and nutrition intelligence platform designed for college messes, hostels, institutional kitchens, and campus cafeterias.
+              SmartBite is an institutional mess management platform designed for college messes, hostels, and campus dining halls to forecast meal attendance, plan weekly menus, and reduce plate waste.
             </p>
 
             <div className="space-y-3 pt-2 text-xs text-brand-200/90">
@@ -216,27 +216,27 @@ export default function Footer() {
             <ul className="space-y-3 text-sm text-brand-200/80">
               <li>
                 <Link to="/features" className="hover:text-white transition-colors">
-                  AI Demand Forecasting
+                  Plate-Based Demand Forecasting
                 </Link>
               </li>
               <li>
                 <Link to="/features" className="hover:text-white transition-colors">
-                  Food Waste Tracking Ledger
+                  Food Waste Tracking (Plates)
                 </Link>
               </li>
               <li>
                 <Link to="/features" className="hover:text-white transition-colors">
-                  Smart Inventory &amp; Purchase
+                  Weekly Menu Planner
                 </Link>
               </li>
               <li>
                 <Link to="/features" className="hover:text-white transition-colors">
-                  Student Meal Preferences
+                  Per-Meal Attendance Polls
                 </Link>
               </li>
               <li>
                 <Link to="/features" className="hover:text-white transition-colors">
-                  Nutrition Macro Intelligence
+                  Attendance Reports &amp; Feedback
                 </Link>
               </li>
             </ul>

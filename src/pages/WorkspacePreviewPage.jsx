@@ -50,8 +50,8 @@ export default function WorkspacePreviewPage() {
               </div>
               <h1 className="text-2xl font-bold text-slate-900 mt-1">
                 {role === 'student'
-                  ? 'My Hostel Mess Menu, Nutrition & Preferences'
-                  : 'Hostel Block A — AI Demand & Batch Prep Overview'}
+                  ? 'My Hostel Weekly Menu & Meal Attendance Polls'
+                  : 'Hostel Block A — Plate Demand & Waste Overview'}
               </h1>
             </div>
 
@@ -65,15 +65,15 @@ export default function WorkspacePreviewPage() {
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <Card className="p-5 space-y-1">
               <div className="flex items-center justify-between text-xs text-slate-500">
-                <span>{role === 'student' ? 'Today’s Total Mess Macros' : 'Predicted Dinner Turnout'}</span>
+                <span>{role === 'student' ? 'Today’s Attendance Status' : 'Predicted Dinner Turnout'}</span>
                 <Users className="w-4 h-4 text-brand-700" />
               </div>
               <p className="text-2xl font-extrabold text-slate-900">
-                {role === 'student' ? '2,030 kcal / 73g Protein' : '1,026 Plates Expected'}
+                {role === 'student' ? '3 / 3 Meals Attending' : '1,026 Plates Expected'}
               </p>
               <p className="text-xs text-brand-700 font-semibold">
                 {role === 'student'
-                  ? 'Estimate based on the standard plate'
+                  ? 'Default state is Attending for every meal'
                   : 'Includes +36 Guest & Safety Buffer Plates'}
               </p>
             </Card>
@@ -131,9 +131,9 @@ export default function WorkspacePreviewPage() {
             <div className="p-5 border-b border-slate-100 flex items-center justify-between">
               <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
                 <UtensilsCrossed className="w-4 h-4 text-brand-700" />
-                Today’s Institutional Menu &amp; Macro Schedule
+                Today’s Institutional Menu &amp; Expected Plates
               </h3>
-              <Badge variant="green">Live Kitchen Sync</Badge>
+              <Badge variant="green">Sample Preview</Badge>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse text-sm">
@@ -141,7 +141,7 @@ export default function WorkspacePreviewPage() {
                   <tr className="bg-cream-100 border-b border-slate-200 text-xs font-bold uppercase text-slate-600">
                     <th className="py-3 px-4">Meal</th>
                     <th className="py-3 px-4">Menu Items</th>
-                    <th className="py-3 px-4">Calories &amp; Protein</th>
+                    <th className="py-3 px-4">Serving Window</th>
                     <th className="py-3 px-4">Turnout Forecast</th>
                     <th className="py-3 px-4">Rating</th>
                   </tr>
@@ -152,7 +152,7 @@ export default function WorkspacePreviewPage() {
                       <td className="py-3.5 px-4 font-bold text-slate-900">{m.mealType}</td>
                       <td className="py-3.5 px-4 text-xs text-slate-600">{m.items.join(' • ')}</td>
                       <td className="py-3.5 px-4 text-xs font-semibold text-brand-800">
-                        {m.calories} kcal • {m.protein} Protein
+                        {m.timeWindow}
                       </td>
                       <td className="py-3.5 px-4 text-xs font-bold text-slate-800">
                         {m.predictedTurnout}

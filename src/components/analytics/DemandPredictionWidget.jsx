@@ -51,7 +51,7 @@ export default function DemandPredictionWidget() {
               Menu: Paneer Tikka Masala, Dal Makhani &amp; Jeera Rice
             </p>
             <p className="text-[11px] text-slate-500 mt-0.5">
-              Standard Plate: 740 kcal • 26g Protein • 92g Carbs • 18g Fats
+              Fixed Evening Thali • Served 07:30 PM – 09:30 PM
             </p>
           </div>
 
@@ -149,33 +149,33 @@ export default function DemandPredictionWidget() {
             </div>
           </div>
 
-          {/* Purchase Planning Derivation Table */}
+          {/* Plate Calculation Breakdown Table */}
           <div className="rounded-xl bg-brand-900/50 border border-brand-800/90 overflow-hidden">
             <div className="px-4 py-2.5 bg-brand-900/90 border-b border-brand-800 flex items-center justify-between text-xs">
               <span className="font-semibold text-brand-100 flex items-center gap-1.5">
-                <Scale className="w-3.5 h-3.5 text-brand-300" /> Purchase Planning (Derived from {expectedPlates} Expected Plates)
+                <Scale className="w-3.5 h-3.5 text-brand-300" /> Plate Forecast Formula Breakdown
               </span>
               <span className="text-brand-300">
-                Quantity per Plate × Expected Plates
+                Sample Preview • Plates per Meal
               </span>
             </div>
             <div className="divide-y divide-brand-800/60 text-xs">
               <div className="px-4 py-2.5 flex items-center justify-between">
-                <span className="text-brand-100 font-medium">Fresh Malai Paneer (80g / plate)</span>
+                <span className="text-brand-100 font-medium">Enrolled Students − Marked &ldquo;Not Coming&rdquo;</span>
                 <span className="text-brand-300">
-                  {expectedPlates} plates × 80g = <strong className="text-white">{((expectedPlates * 80) / 1000).toFixed(1)} kg</strong>
+                  {baseEnrolled} − {markedNotComing} = <strong className="text-white">{baseEnrolled - markedNotComing} plates</strong>
                 </span>
               </div>
               <div className="px-4 py-2.5 flex items-center justify-between">
-                <span className="text-brand-100 font-medium">Urad Dal Dry Soak (40g / plate)</span>
+                <span className="text-brand-100 font-medium">Historical Silent No-Shows &amp; Guest Buffer</span>
                 <span className="text-brand-300">
-                  {expectedPlates} plates × 40g = <strong className="text-white">{((expectedPlates * 40) / 1000).toFixed(1)} kg</strong>
+                  −{silentNoShows} silent no-shows +{guestBuffer} guest buffer = <strong className="text-white">{expectedPlates} expected plates</strong>
                 </span>
               </div>
               <div className="px-4 py-2.5 flex items-center justify-between">
-                <span className="text-brand-100 font-medium">Basmati Rice (120g / plate)</span>
+                <span className="text-brand-100 font-medium">Recommended Kitchen Preparation (+5% Safety Buffer)</span>
                 <span className="text-brand-300">
-                  {expectedPlates} plates × 120g = <strong className="text-white">{((expectedPlates * 120) / 1000).toFixed(1)} kg</strong>
+                  {expectedPlates} + {safetyBufferPlates} buffer = <strong className="text-white">{recommendedPlatesToPrepare} plates</strong>
                 </span>
               </div>
             </div>

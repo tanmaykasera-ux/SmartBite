@@ -73,7 +73,7 @@ export default function LoginPage() {
               <div>
                 <h3 className="text-sm font-bold text-slate-900">1. Mess Owner</h3>
                 <p className="text-xs text-slate-600 mt-0.5">
-                  Full access to the 11-module Mess Owner Dashboard (menus, selections, AI forecasting, waste, inventory, purchase planning, nutrition &amp; reports).
+                  Full access to the 8-module Mess Owner Dashboard (Overview, Weekly Menu, Attendance Polls, Demand Forecasting, Food Waste, Feedback, Attendance Reports &amp; Settings).
                 </p>
               </div>
             </div>
@@ -85,7 +85,7 @@ export default function LoginPage() {
               <div>
                 <h3 className="text-sm font-bold text-slate-900">2. Student (100% Free User)</h3>
                 <p className="text-xs text-slate-600 mt-0.5">
-                  Select preferred meals, inspect daily macros, and rate dishes while retaining unconditional meal entitlement.
+                  View Today’s and This Week’s Menu, mark meals you plan to skip, and rate dishes while retaining unconditional meal entitlement.
                 </p>
               </div>
             </div>

@@ -45,7 +45,7 @@ const foodGalleryItems = [
     subtitle: 'Rotis, dal tadka, paneer curry, rice, salad & raita',
     image: '/images/food-thali.jpg',
     alt: 'Overhead view of a balanced vegetarian Indian mess thali with dal, paneer, rice, chapatis, curd, and fresh salad',
-    macros: '680 kcal • 24g Protein',
+    sessionTag: '1 Plate • Lunch & Dinner',
     tag: 'Complete Meal',
   },
   {
@@ -53,40 +53,40 @@ const foodGalleryItems = [
     subtitle: 'Slow-simmered lentils tempered with cumin, garlic & herbs',
     image: '/images/food-dal-tadka.jpg',
     alt: 'Steaming bowl of golden Indian yellow Dal Tadka garnished with roasted cumin seeds and fresh coriander leaves',
-    macros: '195 kcal • 11g Protein',
-    tag: 'High Protein',
+    sessionTag: 'Daily Staple • Lunch & Dinner',
+    tag: 'Mess Favorite',
   },
   {
     title: 'Fresh Palak Paneer',
-    subtitle: 'Soft cottage cheese cubes in iron-rich spinach gravy',
+    subtitle: 'Soft cottage cheese cubes in fresh spinach gravy',
     image: '/images/food-palak-paneer.jpg',
     alt: 'Close-up of fresh Indian Palak Paneer with white cottage cheese cubes in vibrant green spinach gravy',
-    macros: '260 kcal • 15g Protein',
-    tag: 'Calcium & Iron',
+    sessionTag: 'Weekly Special • Lunch',
+    tag: 'Student Favorite',
   },
   {
     title: 'Aromatic Jeera Rice',
     subtitle: 'Fluffy long-grain basmati rice tempered with whole cumin',
     image: '/images/food-jeera-rice.jpg',
     alt: 'Steamed fluffy basmati Jeera Rice tempered with cumin seeds and garnished with cilantro in a stainless steel bowl',
-    macros: '210 kcal • 4.5g Protein',
-    tag: 'Energy Staple',
+    sessionTag: 'Daily Staple • Lunch & Dinner',
+    tag: 'Comfort Staple',
   },
   {
     title: 'Seasonal Mixed Sabzi',
     subtitle: 'Farm-fresh carrots, beans, peas & cauliflower in light spices',
     image: '/images/food-seasonal-veg.jpg',
     alt: 'Colorful Indian mixed seasonal vegetable sabzi with carrots, green beans, peas, and cauliflower',
-    macros: '140 kcal • 5g Fiber',
-    tag: 'Micronutrients',
+    sessionTag: 'Rotating Menu • Daily',
+    tag: 'Farm Fresh',
   },
   {
     title: 'Chilled Seasonal Fruit Bowl',
     subtitle: 'Freshly cut papaya, watermelon, banana, apple & pomegranate',
     image: '/images/food-fresh-fruits.jpg',
     alt: 'Freshly cut seasonal fruit bowl with papaya, watermelon, banana, apple slices, and pomegranate arils',
-    macros: '110 kcal • Vitamin Rich',
-    tag: 'Fresh Vitamins',
+    sessionTag: 'Morning Counter • Breakfast',
+    tag: 'Seasonal Fresh',
   },
 ];
 
@@ -109,11 +109,11 @@ const problemsList = [
   },
   {
     icon: PackageSearch,
-    title: 'Manual Inventory Registers',
+    title: 'Disconnected Menu Schedules',
     description:
-      'Paper ledger logs lead to sudden stockouts of critical staples like paneer and pulses, or spoilage from untracked expiry dates in the dry store.',
-    stat: 'Illustrative: Unseen stock drift',
-    visualLabel: 'Disconnected storeroom logs',
+      'Last-minute daily menu changes on paper noticeboards leave students unaware of what is being served for Breakfast, Lunch, and Dinner.',
+    stat: 'Illustrative: Paper noticeboard lag',
+    visualLabel: 'Static paper schedules',
   },
   {
     icon: HelpCircle,
@@ -124,12 +124,12 @@ const problemsList = [
     visualLabel: 'No advance student signal',
   },
   {
-    icon: Salad,
-    title: 'Zero Nutritional Transparency',
+    icon: MessageSquareHeart,
+    title: 'Missing Dish Feedback Loop',
     description:
-      'Paper noticeboard menus offer no visibility into calories, protein, carbs, or fats—leaving students and mess committees without macro clarity.',
-    stat: '0% macro visibility on paper',
-    visualLabel: 'Static chalkboard menus',
+      'Without structured post-meal ratings and suggestions, mess committees cannot easily tell which dishes students love or why certain meals generate leftover plates.',
+    stat: 'Unmeasured dish satisfaction',
+    visualLabel: 'No structured feedback',
   },
 ];
 
@@ -151,12 +151,12 @@ const solutionsList = [
     pill: 'Waste Control',
   },
   {
-    icon: PackageSearch,
-    title: 'Smart Inventory & Procurement',
+    icon: CalendarCheck,
+    title: 'Weekly Menu Planner',
     description:
-      'Convert weekly menu occurrences and expected plates into raw ingredient purchase quantities (kg, L, pieces) with low-stock and expiry alerts.',
-    highlight: 'Low-Stock & Expiry Alerts',
-    pill: 'Store Sync',
+      'Plan and publish the full Monday–Sunday fixed menu across Breakfast, Lunch, and Dinner with Copy Last Week and Duplicate a Day shortcuts.',
+    highlight: 'Monday–Sunday Grid',
+    pill: 'Weekly Menu',
   },
   {
     icon: Users,
@@ -167,12 +167,12 @@ const solutionsList = [
     pill: 'Free for Students',
   },
   {
-    icon: Salad,
-    title: 'Standard Plate Nutrition',
+    icon: FileSpreadsheet,
+    title: 'Attendance Reports & Feedback',
     description:
-      'Every published weekly menu displays owner-verified calories, protein, carbohydrates, and fats per standard plate—empowering healthier campus dining.',
-    highlight: 'Standard Plate Macros',
-    pill: 'ICMR-Aligned',
+      'Track daily, weekly, and monthly attendance rates per meal with CSV and print reports alongside 5-star student dish ratings.',
+    highlight: 'Audit-Ready Attendance CSV',
+    pill: 'Live Reports',
   },
 ];
 
@@ -182,7 +182,7 @@ const howItWorksSteps = [
     icon: UploadCloud,
     title: 'Mess Publishes Weekly Menu',
     description:
-      'Mess owners plan the Monday–Sunday fixed menu across Breakfast, Lunch, and Dinner with standard plate nutrition and ingredient quantities per plate.',
+      'Mess owners plan and publish the Monday–Sunday fixed menu across Breakfast, Lunch, and Dinner so students can see the full week ahead.',
     previewTitle: 'Weekly Menu Published',
     previewSub: 'Mon–Sun • Breakfast, Lunch & Dinner',
   },
@@ -209,9 +209,9 @@ const howItWorksSteps = [
     icon: ChefHat,
     title: 'Kitchen Prepares Optimal Plates',
     description:
-      'Kitchen staff receive recommended plate counts per meal and automated raw ingredient purchase lists derived from expected plates.',
+      'Kitchen staff prepare the recommended plate count per meal, log plates served and leftover plates, and review student feedback.',
     previewTitle: 'Plate Prep Guidance',
-    previewSub: 'Recommended plates & store list',
+    previewSub: 'Recommended plates & waste log',
   },
 ];
 
@@ -220,7 +220,7 @@ const majorFeatures = [
     icon: CalendarCheck,
     title: 'Weekly Menu Planner (Mon–Sun)',
     description:
-      'Plan Monday to Sunday fixed menus across Breakfast, Lunch, and Dinner with Copy Last Week, Duplicate Day, and owner-verified standard plate nutrition.',
+      'Plan Monday to Sunday fixed menus across Breakfast, Lunch, and Dinner with Copy Last Week, Duplicate a Day, and one-click week publishing.',
   },
   {
     icon: Users,
@@ -241,10 +241,10 @@ const majorFeatures = [
       'Record plates prepared, plates served, and leftover plates per meal with automatic waste percentage and rupee cost calculations.',
   },
   {
-    icon: ClipboardList,
-    title: 'Plate-Derived Purchase Planner',
+    icon: UtensilsCrossed,
+    title: 'Student Weekly Menu View',
     description:
-      'Calculate weekly ingredient purchase suggestions (in kg, L, or pieces) from weekly menu occurrences × expected plates × quantity per plate.',
+      'Students browse Today’s Menu and This Week’s Menu on any device and receive notifications when the next meal poll opens.',
   },
   {
     icon: MessageSquareHeart,
@@ -253,16 +253,16 @@ const majorFeatures = [
       'Collect 5-star dish ratings, reviews, complaints, and menu suggestions so mess owners can continuously improve meal quality.',
   },
   {
-    icon: Salad,
-    title: 'Standard Plate Nutrition Tracker',
+    icon: ClipboardList,
+    title: 'Student Meal Attendance History',
     description:
-      'Students view daily macro-nutrient estimates based on the standard plate of the meals they are attending.',
+      'Students can review their past attended and skipped meals across the semester while retaining full dining entitlement.',
   },
   {
     icon: FileSpreadsheet,
-    title: 'Plate Reports & CSV Exports',
+    title: 'Attendance Report (CSV & Print)',
     description:
-      'Generate daily, weekly, and monthly plate preparation, leftover plate waste, attendance poll, and procurement reports with one-click CSV export.',
+      'Filter daily, weekly, and monthly attendance reports showing enrolled students, "Not Coming" counts, expected plates, plates prepared, plates served, and attendance rate.',
   },
 ];
 
@@ -279,7 +279,7 @@ const institutionalBenefits = [
     badge: 'Student Voice',
     title: 'Higher Student Dining Satisfaction',
     description:
-      'Reinvest waste savings into higher-quality paneer, seasonal fruits, and student-voted favorite dishes with full macro transparency.',
+      'Reinvest waste savings into higher-quality paneer, seasonal fruits, and student-voted favorite dishes across the weekly menu.',
   },
   {
     metric: '100% Safe',
@@ -291,9 +291,9 @@ const institutionalBenefits = [
   {
     metric: 'Unified SaaS',
     badge: 'Cloud Workflow',
-    title: 'Streamlined Kitchen & Store Governance',
+    title: 'Streamlined Kitchen Governance',
     description:
-      'Replace fragmented paper registers and chat groups with a single workspace for mess owners, head chefs, and storekeepers.',
+      'Replace fragmented paper registers and chat groups with a single workspace for mess owners, head chefs, and hostel wardens.',
   },
 ];
 
@@ -370,7 +370,7 @@ export default function LandingPage() {
             <RevealOnScroll className="lg:col-span-6 space-y-6">
               <div className="flex flex-wrap items-center gap-2">
                 <Badge variant="green" icon={Sparkles}>
-                  AI Food Management &amp; Nutrition Intelligence SaaS
+                  Institutional Mess Attendance &amp; Waste Reduction SaaS
                 </Badge>
                 <Badge variant="neutral" icon={ShieldCheck}>
                   Eat Smart. Waste Less.
@@ -383,7 +383,7 @@ export default function LandingPage() {
               </h1>
 
               <p className="text-lg sm:text-xl text-slate-600 leading-relaxed">
-                SmartBite helps institutional kitchens predict food demand, optimize inventory, reduce food waste and improve nutrition transparency.
+                SmartBite helps institutional kitchens forecast meal attendance in plates, publish weekly menus, and reduce avoidable food waste.
               </p>
 
               {/* Primary CTA: Login to SmartBite | Secondary: Explore Features + Understated Demo Link */}
@@ -474,13 +474,13 @@ export default function LandingPage() {
                 </div>
                 <div>
                   <span className="inline-block text-[10px] font-bold uppercase tracking-wider text-brand-800 bg-brand-50 border border-brand-200 px-2 py-0.5 rounded-md mb-1">
-                    Nutrition Clarity
+                    Weekly Planner
                   </span>
                   <p className="text-xl sm:text-2xl font-extrabold text-brand-800">
-                    4 Macros
+                    Mon – Sun
                   </p>
                   <p className="text-xs font-medium text-slate-500 mt-0.5">
-                    Calorie, Protein, Carb &amp; Fat
+                    Breakfast, Lunch &amp; Dinner
                   </p>
                 </div>
               </div>
@@ -521,14 +521,14 @@ export default function LandingPage() {
                   {/* Bottom Caption Inside Image */}
                   <div className="absolute bottom-4 left-4 right-4 sm:right-auto sm:max-w-xs p-3.5 rounded-2xl bg-brand-950/85 border border-brand-800/90 text-white backdrop-blur-md">
                     <p className="text-[11px] font-bold uppercase tracking-wider text-brand-300">
-                      Today&apos;s Balanced Lunch Thali (Sample)
+                      Today&apos;s Fixed Lunch Thali (Sample)
                     </p>
                     <p className="text-sm font-extrabold text-white mt-0.5">
                       Dal Tadka • Palak Paneer • Jeera Rice • Roti
                     </p>
                     <p className="text-xs text-brand-200 mt-1 flex items-center gap-2">
                       <Flame className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                      <span>680 kcal • 24g Protein • 100% Entitled</span>
+                      <span>1 Standard Plate • 100% Entitled</span>
                     </p>
                   </div>
                 </div>
@@ -702,11 +702,11 @@ export default function LandingPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-12">
           <RevealOnScroll>
             <SectionHeader
-              badge="Nutritious Institutional Menus"
+              badge="Weekly Institutional Menus"
               badgeIcon={UtensilsCrossed}
               title="Fresh Meals,"
               highlight="Less Waste"
-              subtitle="SmartBite is built around real campus dining—helping kitchens serve hot, balanced Indian staples in the right quantities while giving students full macro visibility for every dish."
+              subtitle="SmartBite is built around real campus dining—helping kitchens serve hot, freshly prepared Indian staples in the right plate quantities every day."
             />
           </RevealOnScroll>
 
@@ -728,7 +728,7 @@ export default function LandingPage() {
                       {food.tag}
                     </span>
                     <span className="absolute bottom-3 right-3 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-brand-950/90 text-brand-100 border border-brand-800">
-                      {food.macros}
+                      {food.sessionTag}
                     </span>
                   </div>
                   <div className="p-5 space-y-1.5 bg-gradient-to-b from-white to-cream-50/70">
@@ -771,7 +771,7 @@ export default function LandingPage() {
               <div className="relative rounded-3xl overflow-hidden border-2 border-amber-200/80 shadow-elevated bg-white">
                 <img
                   src="/images/kitchen-prep.jpg"
-                  alt="Institutional kitchen prep counter with stainless steel gastronorm containers, digital scales, and raw ingredients"
+                  alt="Institutional kitchen prep counter with stainless steel gastronorm containers and fresh vegetables"
                   width="640"
                   height="420"
                   loading="lazy"
@@ -855,7 +855,7 @@ export default function LandingPage() {
                 </span>
               </h2>
               <p className="text-base text-brand-100/90 leading-relaxed">
-                SmartBite replaces kitchen guesswork with closed-loop workflows connecting published menus, optional student preferences, storeroom inventory, and nutrition science.
+                SmartBite replaces kitchen guesswork with closed-loop workflows connecting published weekly menus, per-meal attendance polls, plate forecasting, and daily waste tracking.
               </p>
             </RevealOnScroll>
 
@@ -1000,7 +1000,7 @@ export default function LandingPage() {
               badgeIcon={Monitor}
               title="One Platform for Mess Operators &"
               highlight="Hostel Students"
-              subtitle="Mess owners get a command center for menus, student demand signals, inventory, and waste logs—while students get a clean mobile experience to preview dishes and macros for free."
+              subtitle="Mess owners get a command center for weekly menus, attendance polls, plate forecasts, and waste logs—while students get a clean mobile experience to view the menu and mark meals they will skip for free."
             />
           </RevealOnScroll>
 
@@ -1038,25 +1038,25 @@ export default function LandingPage() {
                   <div className="space-y-2.5">
                     {[
                       {
-                        dish: 'Breakfast • High-Energy Campus Thali',
+                        dish: 'Breakfast • Morning Campus Thali',
                         img: '/images/food-seasonal-veg.jpg',
                         polled: '48 students marked Not Coming',
                         prep: '412 plates expected',
-                        macros: '700 kcal • 27g P',
+                        window: '07:30 AM – 09:30 AM',
                       },
                       {
                         dish: 'Lunch • Palak Paneer, Dal Tadka & Jeera Rice',
                         img: '/images/food-palak-paneer.jpg',
                         polled: '38 students marked Not Coming',
                         prep: '420 plates expected',
-                        macros: '680 kcal • 24g P',
+                        window: '12:30 PM – 02:30 PM',
                       },
                       {
                         dish: 'Dinner • Punjabi Rajma & Phulka Thali',
                         img: '/images/food-dal-tadka.jpg',
                         polled: '62 students marked Not Coming',
                         prep: '398 plates expected',
-                        macros: '760 kcal • 26g P',
+                        window: '07:30 PM – 09:30 PM',
                       },
                     ].map((row) => (
                       <div
@@ -1077,7 +1077,7 @@ export default function LandingPage() {
                               {row.dish}
                             </p>
                             <p className="text-[11px] text-slate-500">
-                              {row.polled} • {row.macros}
+                              {row.polled} • {row.window}
                             </p>
                           </div>
                         </div>
@@ -1151,14 +1151,14 @@ export default function LandingPage() {
                     </div>
                   </div>
 
-                  {/* Standard Plate Macro Total & CTA */}
+                  {/* Weekly Schedule & CTA */}
                   <div className="p-3 rounded-2xl bg-white border border-slate-200 space-y-2">
                     <div className="flex items-center justify-between text-xs">
                       <span className="font-semibold text-slate-600">
-                        Standard Plate Macros:
+                        Weekly Menu Status:
                       </span>
                       <span className="font-extrabold text-brand-800">
-                        680 kcal • 24g Protein
+                        Mon – Sun Published
                       </span>
                     </div>
                     <Link
@@ -1186,8 +1186,8 @@ export default function LandingPage() {
               badge="Complete Feature Ecosystem"
               badgeIcon={Sparkles}
               title="Everything You Need to Manage"
-              highlight="Institutional Food & Nutrition"
-              subtitle="Purpose-built modules for mess owners, kitchen managers, storekeepers, and hostel residents."
+              highlight="Institutional Dining & Attendance"
+              subtitle="Purpose-built modules for mess owners, kitchen managers, hostel wardens, and students."
             />
           </RevealOnScroll>
 
@@ -1240,7 +1240,7 @@ export default function LandingPage() {
               badgeIcon={TrendingUp}
               title="Why Mess Owners, Hostel Wardens &"
               highlight="Colleges Choose SmartBite"
-              subtitle="SmartBite aligns operational efficiency for mess operators with superior nutrition visibility and zero restrictions for students."
+              subtitle="SmartBite aligns plate-level operational efficiency for mess operators with weekly menu clarity and zero restrictions for students."
             />
           </RevealOnScroll>
 
@@ -1410,14 +1410,14 @@ export default function LandingPage() {
                   See SmartBite in Action for Your Mess or Campus.
                 </h2>
                 <p className="text-sm sm:text-base text-brand-100/90 leading-relaxed">
-                  Schedule a personalized walkthrough with our FoodTech team. We will model your daily meal turnout, demonstrate our inventory and waste calculators, and help you set up a pilot.
+                  Schedule a personalized walkthrough with our FoodTech team. We will model your daily plate turnout, demonstrate our weekly menu planner and waste calculators, and help you set up a pilot.
                 </p>
 
                 <div className="space-y-3 pt-2 text-xs text-brand-200">
                   <div className="flex items-center gap-2.5">
                     <CheckCircle2 className="w-4 h-4 text-brand-400 shrink-0" />
                     <span>
-                      Live walkthrough of all 11 Mess Owner Dashboard modules
+                      Live walkthrough of all 8 Mess Owner Dashboard modules
                     </span>
                   </div>
                   <div className="flex items-center gap-2.5">

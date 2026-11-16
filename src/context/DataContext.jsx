@@ -17,8 +17,6 @@ import {
   initialHistoricalSelections,
   initialWasteLogs,
   weeklyConsumptionVsWasteSeries,
-  initialInventory,
-  initialInventoryTransactions,
   initialFeedbackList,
   initialNotifications,
   initialStudentSelectionsMap,
@@ -36,9 +34,7 @@ import {
 import {
   generateDemandForecasts,
   analyzeFoodWaste,
-  analyzeInventoryIntelligence,
   generateSmartRecommendations,
-  computeMessNutritionAnalytics,
 } from '../lib/analyticsEngine';
 import {
   getTodayDateStr,
@@ -114,8 +110,6 @@ function createEmptyStudentProfile(user) {
     hostel_name: user?.hostelName || '',
     room_number: '',
     dietary_preference: 'Vegetarian',
-    daily_calorie_goal: 2200,
-    allergies_note: '',
     phone: user?.phone || '',
     meal_entitlement_active: true,
   };
@@ -146,6 +140,7 @@ export function DataProvider({ children }) {
       ? loadDemoLocal('sb_demo_attendance_responses', initialAttendanceResponses)
       : []
   );
+  const [attendanceRecords, setAttendanceRecords] = useState([]);
   const [historicalSelections, setHistoricalSelections] = useState(() =>
     isDemoMode
       ? loadDemoLocal('sb_demo_hist_selections', initialHistoricalSelections)
@@ -165,14 +160,6 @@ export function DataProvider({ children }) {
   const [weeklySeries, setWeeklySeries] = useState(() =>
     isDemoMode
       ? loadDemoLocal('sb_demo_weekly_series', weeklyConsumptionVsWasteSeries)
-      : []
-  );
-  const [inventory, setInventory] = useState(() =>
-    isDemoMode ? loadDemoLocal('sb_demo_inventory', initialInventory) : []
-  );
-  const [inventoryTransactions, setInventoryTransactions] = useState(() =>
-    isDemoMode
-      ? loadDemoLocal('sb_demo_inventory_tx', initialInventoryTransactions)
       : []
   );
   const [feedbackList, setFeedbackList] = useState(() =>
@@ -206,8 +193,6 @@ export function DataProvider({ children }) {
           hostel_name: 'Hostel Block A',
           room_number: 'A-304',
           dietary_preference: 'Vegetarian',
-          daily_calorie_goal: 2200,
-          allergies_note: 'None',
           phone: '+91 98451 10293',
           meal_entitlement_active: true,
         })
@@ -258,8 +243,6 @@ export function DataProvider({ children }) {
     saveDemoLocal('sb_demo_holidays_events', holidaysEvents);
     saveDemoLocal('sb_demo_waste_logs', wasteLogs);
     saveDemoLocal('sb_demo_weekly_series', weeklySeries);
-    saveDemoLocal('sb_demo_inventory', inventory);
-    saveDemoLocal('sb_demo_inventory_tx', inventoryTransactions);
     saveDemoLocal('sb_demo_feedback', feedbackList);
     saveDemoLocal('sb_demo_notifications', notifications);
     saveDemoLocal('sb_demo_student_selections_map', studentSelectionsMap);
@@ -283,8 +266,6 @@ export function DataProvider({ children }) {
     holidaysEvents,
     wasteLogs,
     weeklySeries,
-    inventory,
-    inventoryTransactions,
     feedbackList,
     notifications,
     studentSelectionsMap,
@@ -308,6 +289,7 @@ export function DataProvider({ children }) {
       setAttendanceResponses(
         loadDemoLocal('sb_demo_attendance_responses', initialAttendanceResponses)
       );
+      setAttendanceRecords([]);
       setHistoricalSelections(
         loadDemoLocal('sb_demo_hist_selections', initialHistoricalSelections)
       );
@@ -318,10 +300,6 @@ export function DataProvider({ children }) {
       setWasteLogs(loadDemoLocal('sb_demo_waste_logs', initialWasteLogs));
       setWeeklySeries(
         loadDemoLocal('sb_demo_weekly_series', weeklyConsumptionVsWasteSeries)
-      );
-      setInventory(loadDemoLocal('sb_demo_inventory', initialInventory));
-      setInventoryTransactions(
-        loadDemoLocal('sb_demo_inventory_tx', initialInventoryTransactions)
       );
       setFeedbackList(loadDemoLocal('sb_demo_feedback', initialFeedbackList));
       setNotifications(
@@ -362,13 +340,12 @@ export function DataProvider({ children }) {
       setMenus([]);
       setStudents([]);
       setAttendanceResponses([]);
+      setAttendanceRecords([]);
       setHistoricalSelections([]);
       setForecastOverridesMap({});
       setHolidaysEvents([]);
       setWasteLogs([]);
       setWeeklySeries([]);
-      setInventory([]);
-      setInventoryTransactions([]);
       setFeedbackList([]);
       setNotifications([]);
       setStudentSelectionsMap({});
@@ -399,7 +376,7 @@ export function DataProvider({ children }) {
         // Students must ONLY see menus from their own mess AND with publish_status = 'published'
         let menusQuery = supabase
           .from('menus')
-          .select('*, menu_items(*)')
+          .select('id, mess_id, menu_date, meal_type, title, publish_status, selection_deadline, notes, week_start_date, day_of_week, day_name, menu_items(id, menu_id, mess_id, name, description, image_url)')
           .eq('mess_id', messId);
 
         if (user.role === 'student') {
@@ -410,8 +387,6 @@ export function DataProvider({ children }) {
           messRes,
           menusRes,
           wasteRes,
-          invRes,
-          txRes,
           fbRes,
           notifRes,
           stuRes,
@@ -427,16 +402,6 @@ export function DataProvider({ children }) {
             .select('*')
             .eq('mess_id', messId)
             .order('log_date', { ascending: false }),
-          supabase
-            .from('inventory_items')
-            .select('*')
-            .eq('mess_id', messId)
-            .order('ingredient_name'),
-          supabase
-            .from('inventory_transactions')
-            .select('*, inventory_items(ingredient_name, unit)')
-            .eq('mess_id', messId)
-            .order('created_at', { ascending: false }),
           supabase
             .from('feedback')
             .select('*')
@@ -464,6 +429,20 @@ export function DataProvider({ children }) {
             .eq('mess_id', messId),
         ]);
 
+        // Fallback if week_start_date columns from 006 are not yet on menus
+        let menuRowsData = menusRes.data;
+        if (menusRes.error) {
+          let fallbackMenusQuery = supabase
+            .from('menus')
+            .select('id, mess_id, menu_date, meal_type, title, publish_status, selection_deadline, notes, menu_items(id, menu_id, mess_id, name, description, image_url)')
+            .eq('mess_id', messId);
+          if (user.role === 'student') {
+            fallbackMenusQuery = fallbackMenusQuery.eq('publish_status', 'published');
+          }
+          const retryMenus = await fallbackMenusQuery.order('menu_date', { ascending: false });
+          menuRowsData = retryMenus.data || [];
+        }
+
         // Only students whose mess_id matches this mess
         const realStudents = (stuRes.data || []).filter(
           (s) => s.mess_id === messId
@@ -484,7 +463,7 @@ export function DataProvider({ children }) {
 
         // Map menus by id for reference
         const menuById = {};
-        (menusRes.data || []).forEach((m) => {
+        (menuRowsData || []).forEach((m) => {
           menuById[m.id] = m;
         });
 
@@ -611,7 +590,7 @@ export function DataProvider({ children }) {
         }
 
         // Set Menus strictly from DB rows (students only see published menus from their own mess)
-        const rawMenus = (menusRes.data || []).filter((m) => {
+        const rawMenus = (menuRowsData || []).filter((m) => {
           if (m.mess_id !== messId) return false;
           if (
             user.role === 'student' &&
@@ -625,7 +604,8 @@ export function DataProvider({ children }) {
         const mappedMenus = rawMenus.map((m) => {
           const cleanDate = normalizeDateStr(m.menu_date) || m.menu_date;
           return {
-            ...m,
+            id: m.id,
+            mess_id: m.mess_id,
             menu_date: cleanDate,
             week_start_date:
               normalizeDateStr(m.week_start_date) ||
@@ -636,51 +616,58 @@ export function DataProvider({ children }) {
                 : getDayOfWeekIndex(cleanDate),
             day_name: m.day_name || getDayOfWeekName(cleanDate),
             meal_type: String(m.meal_type || 'lunch').toLowerCase(),
+            title: m.title || '',
+            publish_status: m.publish_status || 'draft',
+            selection_deadline: m.selection_deadline || null,
+            notes: m.notes || '',
             items: (m.menu_items || []).map((item) => ({
-              ...item,
+              id: item.id,
+              menu_id: item.menu_id,
+              mess_id: item.mess_id,
               name: item.name || item.dish_name || '',
               dish_name: item.name || item.dish_name || '',
-              ingredient_quantities: Array.isArray(item.ingredient_quantities)
-                ? item.ingredient_quantities
-                : [],
+              description: item.description || '',
+              image_url: item.image_url || '',
             })),
           };
         });
         setMenus(mappedMenus);
 
         // Set Waste Logs & compute Weekly Series in PLATES strictly from DB rows
-        const realWasteLogs = (wasteRes.data || []).map((log) => {
-          const platesPrep = Math.round(
-            Number(log.plates_prepared ?? log.prepared_kg ?? 0)
-          );
-          const platesServed = Math.round(
-            Number(log.plates_served ?? log.consumed_kg ?? 0)
-          );
-          const leftoverPlates =
-            log.leftover_plates !== undefined && log.leftover_plates !== null
-              ? Math.round(Number(log.leftover_plates))
-              : log.leftover_kg !== undefined && log.leftover_kg !== null
-              ? Math.round(Number(log.leftover_kg))
-              : Math.max(0, platesPrep - platesServed);
-          const costPerPlate = Number(
-            log.cost_per_plate ?? log.unit_cost_inr ?? 65
-          );
-          return {
-            ...log,
-            plates_prepared: platesPrep,
-            plates_served: platesServed,
-            leftover_plates: leftoverPlates,
-            cost_per_plate: costPerPlate,
-            cost:
-              log.cost !== undefined && log.cost !== null
-                ? Number(log.cost)
-                : leftoverPlates * costPerPlate,
-            waste_percentage:
-              platesPrep > 0
-                ? Number(((leftoverPlates / platesPrep) * 100).toFixed(2))
-                : 0,
-          };
-        });
+        const realWasteLogs = (wasteRes.data || [])
+          .filter((log) => !log.mess_id || log.mess_id === messId)
+          .map((log) => {
+            const platesPrep = Math.round(
+              Number(log.plates_prepared ?? log.prepared_kg ?? 0)
+            );
+            const platesServed = Math.round(
+              Number(log.plates_served ?? log.consumed_kg ?? 0)
+            );
+            const leftoverPlates =
+              log.leftover_plates !== undefined && log.leftover_plates !== null
+                ? Math.round(Number(log.leftover_plates))
+                : log.leftover_kg !== undefined && log.leftover_kg !== null
+                ? Math.round(Number(log.leftover_kg))
+                : Math.max(0, platesPrep - platesServed);
+            const costPerPlate = Number(
+              log.cost_per_plate ?? log.unit_cost_inr ?? 65
+            );
+            return {
+              ...log,
+              plates_prepared: platesPrep,
+              plates_served: platesServed,
+              leftover_plates: leftoverPlates,
+              cost_per_plate: costPerPlate,
+              cost:
+                log.cost !== undefined && log.cost !== null
+                  ? Number(log.cost)
+                  : leftoverPlates * costPerPlate,
+              waste_percentage:
+                platesPrep > 0
+                  ? Number(((leftoverPlates / platesPrep) * 100).toFixed(2))
+                  : 0,
+            };
+          });
         setWasteLogs(realWasteLogs);
 
         if (realWasteLogs.length > 0) {
@@ -718,26 +705,17 @@ export function DataProvider({ children }) {
           setWeeklySeries([]);
         }
 
-        // Set Inventory & Transactions strictly from DB rows
-        setInventory(invRes.data || []);
-        setInventoryTransactions(
-          (txRes.data || []).map((tx) => ({
-            ...tx,
-            ingredient_name:
-              tx.inventory_items?.ingredient_name ||
-              tx.ingredient_name ||
-              'Ingredient',
-            unit: tx.inventory_items?.unit || tx.unit || 'kg',
-          }))
-        );
-
         // Set Feedback, Notifications, Holidays strictly from DB rows
         setFeedbackList(fbRes.data || []);
         setNotifications(notifRes.data || []);
         setHolidaysEvents(holRes.data || []);
 
-        // Set Historical Attendance strictly from DB rows
-        const realAttendance = attRes.data || [];
+        // Set Historical Attendance strictly from DB rows for this mess
+        const realAttendance = (attRes.data || []).filter(
+          (rec) => !rec.mess_id || rec.mess_id === messId
+        );
+        setAttendanceRecords(realAttendance);
+
         if (realAttendance.length > 0) {
           const histByDate = {};
           realAttendance.forEach((rec) => {
@@ -827,37 +805,14 @@ export function DataProvider({ children }) {
 
             if (menuObj) {
               const allItems = menuObj.items || [];
-              const cals = allItems.reduce(
-                (s, d) => s + Number(d.calories || 0),
-                0
-              );
-              const prot = allItems.reduce(
-                (s, d) => s + Number(d.protein || 0),
-                0
-              );
-              const carbs = allItems.reduce(
-                (s, d) => s + Number(d.carbs || 0),
-                0
-              );
-              const fats = allItems.reduce(
-                (s, d) => s + Number(d.fats || 0),
-                0
-              );
-
               nextHist.push({
                 id: resp.id || `hist-${mDate}-${mTypeLower}`,
                 meal_date: mDate,
                 meal_type: mTypeCap,
                 title: menuObj.title || `${mTypeCap} Menu`,
-                dishes: allItems.map(
-                  (d) => `${d.name} (${d.serving_size || '1 Plate'})`
-                ),
-                calories: cals,
-                protein: Number(prot.toFixed(1)),
-                carbs: Number(carbs.toFixed(1)),
-                fats: Number(fats.toFixed(1)),
+                dishes: allItems.map((d) => d.name || d.dish_name).filter(Boolean),
                 status: resp.will_attend
-                  ? 'Attended (Standard Plate)'
+                  ? 'Attended'
                   : 'Skipped (Marked Not Coming)',
               });
             }
@@ -950,7 +905,6 @@ export function DataProvider({ children }) {
             last_active: m.updated_at
               ? new Date(m.updated_at).toLocaleDateString('en-IN')
               : 'Active',
-            monthly_waste_kg: 0,
           };
         });
         setMessesList(realMesses);
@@ -1045,7 +999,7 @@ export function DataProvider({ children }) {
     refreshFromSupabase();
   }, [refreshFromSupabase]);
 
-  // Shared student list and registered count used by Overview, Attendance Polls, and Forecasting
+  // Shared student list and registered count used by Overview, Attendance Polls, Forecasting, and Reports
   const messStudents = useMemo(() => {
     if (isDemoMode) return students;
     if (!user?.messId) return [];
@@ -1125,33 +1079,12 @@ export function DataProvider({ children }) {
 
   const wasteAnalytics = useMemo(() => analyzeFoodWaste(wasteLogs), [wasteLogs]);
 
-  const inventoryIntelligence = useMemo(
-    () =>
-      analyzeInventoryIntelligence({
-        inventory,
-        menus,
-        forecasts,
-        expectedAttendance:
-          forecasts[0]?.expected_plates || totalRegisteredStudents,
-        messProfile,
-      }),
-    [inventory, menus, forecasts, totalRegisteredStudents, messProfile]
-  );
-
   const smartRecommendations = useMemo(
     () =>
       generateSmartRecommendations({
-        inventory,
         wasteLogs,
-        menus,
-        historicalSelections,
       }),
-    [inventory, wasteLogs, menus, historicalSelections]
-  );
-
-  const nutritionAnalytics = useMemo(
-    () => computeMessNutritionAnalytics(menus),
-    [menus]
+    [wasteLogs]
   );
 
   // ============================================================================
@@ -1239,23 +1172,6 @@ export function DataProvider({ children }) {
       (existingIndex >= 0 ? menus[existingIndex].items : []);
 
     if (isSupabaseConfigured && supabase && !isDemoMode && user?.messId) {
-      const totalCalories = currentItems.reduce(
-        (s, i) => s + Number(i.calories || 0),
-        0
-      );
-      const totalProtein = currentItems.reduce(
-        (s, i) => s + Number(i.protein || 0),
-        0
-      );
-      const totalCarbs = currentItems.reduce(
-        (s, i) => s + Number(i.carbs || 0),
-        0
-      );
-      const totalFats = currentItems.reduce(
-        (s, i) => s + Number(i.fats || 0),
-        0
-      );
-
       const baseRow = {
         mess_id: user.messId,
         menu_date: targetMenuDate,
@@ -1269,10 +1185,6 @@ export function DataProvider({ children }) {
         publish_status: menuPayload.publish_status || 'draft',
         selection_deadline: menuPayload.selection_deadline || null,
         notes: menuPayload.notes || '',
-        total_calories: totalCalories,
-        total_protein: totalProtein,
-        total_carbs: totalCarbs,
-        total_fats: totalFats,
       };
 
       // Try upserting with 006 weekly columns first; fallback if 006 not yet applied
@@ -1289,14 +1201,14 @@ export function DataProvider({ children }) {
           ],
           { onConflict: 'mess_id,menu_date,meal_type' }
         )
-        .select()
+        .select('id, mess_id, menu_date, meal_type, title, publish_status, selection_deadline, notes')
         .maybeSingle();
 
       if (upsertErr) {
         const retry = await supabase
           .from('menus')
           .upsert([baseRow], { onConflict: 'mess_id,menu_date,meal_type' })
-          .select()
+          .select('id, mess_id, menu_date, meal_type, title, publish_status, selection_deadline, notes')
           .maybeSingle();
         upsertedMenu = retry.data;
       }
@@ -1350,32 +1262,7 @@ export function DataProvider({ children }) {
 
   const addOrUpdateMenuItem = async (menuId, dish) => {
     let dishId = dish.id || `dish-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`;
-    const dishName = dish.name || dish.dish_name || '';
-
-    const structuredQuantities = Array.isArray(dish.ingredient_quantities)
-      ? dish.ingredient_quantities
-          .filter((iq) => iq && String(iq.name || '').trim())
-          .map((iq) => ({
-            name: String(iq.name).trim(),
-            quantity_per_plate:
-              iq.quantity_per_plate !== '' &&
-              iq.quantity_per_plate !== null &&
-              iq.quantity_per_plate !== undefined
-                ? Number(iq.quantity_per_plate)
-                : null,
-            unit: ['g', 'ml', 'pieces'].includes(iq.unit) ? iq.unit : 'g',
-          }))
-      : [];
-
-    const ingredientsArray =
-      structuredQuantities.length > 0
-        ? structuredQuantities.map((iq) => iq.name)
-        : Array.isArray(dish.ingredients)
-        ? dish.ingredients
-        : String(dish.ingredients || '')
-            .split(',')
-            .map((s) => s.trim())
-            .filter(Boolean);
+    const dishName = String(dish.name || dish.dish_name || '').trim();
 
     if (isSupabaseConfigured && supabase && !isDemoMode && user?.messId) {
       const basePayload = {
@@ -1384,36 +1271,16 @@ export function DataProvider({ children }) {
         name: dishName,
         description: dish.description || '',
         image_url: dish.image_url || '',
-        serving_size: dish.serving_size || '1 Standard Plate',
-        calories: Number(dish.calories || 0),
-        protein: Number(dish.protein || 0),
-        carbs: Number(dish.carbs || 0),
-        fats: Number(dish.fats || 0),
-        ingredients: ingredientsArray,
       };
       if (dish.id && !String(dish.id).startsWith('dish-')) {
         basePayload.id = dish.id;
       }
 
-      let { data: savedDish, error: dishErr } = await supabase
+      const { data: savedDish } = await supabase
         .from('menu_items')
-        .upsert([
-          {
-            ...basePayload,
-            ingredient_quantities: structuredQuantities,
-          },
-        ])
-        .select()
+        .upsert([basePayload])
+        .select('id, menu_id, mess_id, name, description, image_url')
         .maybeSingle();
-
-      if (dishErr) {
-        const retry = await supabase
-          .from('menu_items')
-          .upsert([basePayload])
-          .select()
-          .maybeSingle();
-        savedDish = retry.data;
-      }
 
       if (savedDish?.id) {
         dishId = savedDish.id;
@@ -1421,17 +1288,12 @@ export function DataProvider({ children }) {
     }
 
     const normalizedDish = {
-      ...dish,
       id: dishId,
+      menu_id: menuId,
       name: dishName,
       dish_name: dishName,
-      serving_size: dish.serving_size || '1 Standard Plate',
-      calories: Number(dish.calories || 0),
-      protein: Number(dish.protein || 0),
-      carbs: Number(dish.carbs || 0),
-      fats: Number(dish.fats || 0),
-      ingredients: ingredientsArray,
-      ingredient_quantities: structuredQuantities,
+      description: dish.description || '',
+      image_url: dish.image_url || '',
     };
 
     setMenus((prev) =>
@@ -1494,7 +1356,9 @@ export function DataProvider({ children }) {
 
       for (const item of sourceMenu.items || []) {
         await addOrUpdateMenuItem(createdMenu.id, {
-          ...item,
+          name: item.name || item.dish_name,
+          description: item.description || '',
+          image_url: item.image_url || '',
           id: `dish-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
         });
       }
@@ -1660,28 +1524,17 @@ export function DataProvider({ children }) {
       return [newRecord, ...filtered];
     });
 
-    // Update student meal history with standard plate nutrition
+    // Update student meal history
     if (matchingMenu) {
       const allItems = matchingMenu.items || [];
-      const cals = allItems.reduce((s, d) => s + Number(d.calories || 0), 0);
-      const prot = allItems.reduce((s, d) => s + Number(d.protein || 0), 0);
-      const carbs = allItems.reduce((s, d) => s + Number(d.carbs || 0), 0);
-      const fats = allItems.reduce((s, d) => s + Number(d.fats || 0), 0);
-
       const historyEntry = {
         id: `hist-${resolvedDate}-${normalizedMealLower}`,
         meal_date: resolvedDate,
         meal_type: normalizedMealCap,
         title: matchingMenu.title || `${normalizedMealCap} Menu`,
-        dishes: allItems.map(
-          (d) => `${d.name || d.dish_name} (${d.serving_size || '1 Plate'})`
-        ),
-        calories: cals,
-        protein: Number(prot.toFixed(1)),
-        carbs: Number(carbs.toFixed(1)),
-        fats: Number(fats.toFixed(1)),
+        dishes: allItems.map((d) => d.name || d.dish_name).filter(Boolean),
         status: isAttending
-          ? 'Attended (Standard Plate)'
+          ? 'Attended'
           : 'Skipped (Marked Not Coming)',
       };
 
@@ -1708,7 +1561,10 @@ export function DataProvider({ children }) {
             {
               mess_id: user.messId,
               student_id: user.id,
-              menu_id: matchingMenu?.id || null,
+              menu_id:
+                matchingMenu?.id && !String(matchingMenu.id).startsWith('menu-')
+                  ? matchingMenu.id
+                  : null,
               meal_date: resolvedDate,
               meal_type: normalizedMealLower,
               status: resolvedStatus,
@@ -1723,8 +1579,11 @@ export function DataProvider({ children }) {
           { onConflict: 'mess_id,student_id,meal_date,meal_type' }
         );
 
-      // Also keep `meal_selections` in sync if a published menu row exists
-      if (matchingMenu?.id && !String(matchingMenu.id).startsWith('menu-')) {
+      if (
+        matchingMenu?.id &&
+        !String(matchingMenu.id).startsWith('menu-') &&
+        String(matchingMenu.publish_status || '').toLowerCase() === 'published'
+      ) {
         await supabase.from('meal_selections').upsert(
           [
             {
@@ -1734,62 +1593,49 @@ export function DataProvider({ children }) {
               will_attend: isAttending,
               portion_preference: 'regular',
               entitlement_retained: true,
+              submitted_at: nowIso,
             },
           ],
           { onConflict: 'menu_id,student_id' }
         );
       } else if (pollErr) {
-        console.warn('[SmartBite][AttendancePoll] Upsert warning:', pollErr);
+        throw new Error(
+          pollErr.message ||
+            'Could not save your attendance poll response. Please ensure migration 006_plate_based_attendance.sql has been executed in Supabase.'
+        );
       }
     }
 
     return newRecord;
   };
 
-  // Alias for backward compatibility
+  // Backwards-compatible alias
   const submitStudentMealSelection = submitMealAttendancePoll;
 
   // ============================================================================
-  // 4. STUDENT FEEDBACK SUBMISSION & OWNER REPLY
+  // 4. STUDENT FEEDBACK & PROFILE
   // ============================================================================
-  const submitStudentFeedback = async ({
-    student_name,
-    meal_type,
-    dish_name,
-    rating,
-    feedback_type,
-    feedback_category,
-    comment,
-    review,
-    complaint,
-    suggestion,
-  }) => {
-    const resolvedType =
-      feedback_type ||
-      (feedback_category === 'complaint'
-        ? 'complaint'
-        : feedback_category === 'suggestion'
-        ? 'suggestion'
-        : 'review');
-
-    const textBody = comment || review || complaint || suggestion || '';
+  const submitStudentFeedback = async (feedbackPayload) => {
+    const resolvedType = feedbackPayload.complaint
+      ? 'complaint'
+      : feedbackPayload.suggestion
+      ? 'suggestion'
+      : feedbackPayload.feedback_type || 'review';
 
     const newFb = {
       id: 'fb-' + Date.now(),
-      student_name:
-        student_name ||
-        studentProfile.full_name ||
-        user?.fullName ||
-        'Verified Student',
-      meal_type: String(meal_type || 'lunch').toLowerCase(),
-      dish_name: dish_name || 'Mess Meal',
-      rating: Number(rating || 5),
+      student_name: `${studentProfile.full_name} (${
+        studentProfile.roll_number ||
+        studentProfile.student_roll_id ||
+        'Student'
+      })`,
+      meal_type: (feedbackPayload.meal_type || 'lunch').toLowerCase(),
+      dish_name: feedbackPayload.dish_name,
+      rating: Number(feedbackPayload.rating || 5),
       feedback_type: resolvedType,
-      feedback_category: feedback_category || resolvedType,
-      comment: textBody,
-      review: resolvedType === 'review' ? textBody : review || '',
-      complaint: resolvedType === 'complaint' ? textBody : complaint || '',
-      suggestion: resolvedType === 'suggestion' ? textBody : suggestion || '',
+      review: feedbackPayload.review || feedbackPayload.comment || '',
+      complaint: feedbackPayload.complaint || '',
+      suggestion: feedbackPayload.suggestion || '',
       status: 'open',
       owner_reply: '',
       created_at: new Date().toISOString(),
@@ -1909,7 +1755,6 @@ export function DataProvider({ children }) {
       },
     }));
 
-    // Also append to historicalSelections so future forecasts calibrate with this outcome
     if (target) {
       setHistoricalSelections((prev) => [
         ...prev,
@@ -1924,6 +1769,31 @@ export function DataProvider({ children }) {
           dinnerSelected:
             target.meal_type === 'dinner' ? servedNum : target.expected_plates,
         },
+      ]);
+
+      const newAttRec = {
+        id: `att-${target.forecast_date}-${target.meal_type}`,
+        mess_id: user?.messId || messProfile.id,
+        record_date: target.forecast_date,
+        meal_type: target.meal_type,
+        total_registered: target.enrolled_students,
+        not_coming_count: target.not_coming_count,
+        expected_plates: target.expected_plates,
+        plates_prepared: Number(
+          target.overridden_prep_plates ?? target.recommended_prep_plates ?? 0
+        ),
+        plates_served: servedNum,
+        actual_attended_count: servedNum,
+      };
+      setAttendanceRecords((prev) => [
+        newAttRec,
+        ...prev.filter(
+          (r) =>
+            !(
+              normalizeDateStr(r.record_date) === target.forecast_date &&
+              String(r.meal_type || '').toLowerCase() === target.meal_type
+            )
+        ),
       ]);
     }
   };
@@ -1953,7 +1823,7 @@ export function DataProvider({ children }) {
   };
 
   // ============================================================================
-  // 6. PLATE-BASED FOOD WASTE LOGGING & INVENTORY MANAGEMENT
+  // 6. PLATE-BASED FOOD WASTE LOGGING & MESS SETTINGS
   // ============================================================================
   const addFoodWasteLog = async (payload) => {
     const platesPrepared = Math.round(
@@ -2050,229 +1920,6 @@ export function DataProvider({ children }) {
     }
 
     return newLog;
-  };
-
-  const addInventoryItem = async (itemPayload) => {
-    let recordId = 'inv-' + Date.now();
-    const qtyPerPlate =
-      itemPayload.quantity_per_plate !== undefined &&
-      itemPayload.quantity_per_plate !== '' &&
-      Number(itemPayload.quantity_per_plate) > 0
-        ? Number(itemPayload.quantity_per_plate)
-        : null;
-    const plateUnit = ['g', 'ml', 'pieces'].includes(itemPayload.plate_unit)
-      ? itemPayload.plate_unit
-      : itemPayload.unit === 'L'
-      ? 'ml'
-      : itemPayload.unit === 'pieces'
-      ? 'pieces'
-      : 'g';
-
-    const newItem = {
-      id: recordId,
-      ingredient_name: itemPayload.ingredient_name,
-      category: itemPayload.category || 'Grains & Pulses',
-      current_stock: Number(itemPayload.current_stock || 0),
-      minimum_stock: Number(itemPayload.minimum_stock || 10),
-      unit: itemPayload.unit || 'kg',
-      unit_price: Number(itemPayload.unit_price || 60),
-      quantity_per_plate: qtyPerPlate,
-      plate_unit: plateUnit,
-      expiry_date: itemPayload.expiry_date || null,
-      supplier_name: itemPayload.supplier_name || 'Vendor',
-    };
-
-    if (isSupabaseConfigured && supabase && !isDemoMode && user?.messId) {
-      const baseInv = {
-        mess_id: user.messId,
-        ingredient_name: newItem.ingredient_name,
-        category: newItem.category,
-        current_stock: newItem.current_stock,
-        minimum_stock: newItem.minimum_stock,
-        unit: newItem.unit,
-        unit_price: newItem.unit_price,
-        expiry_date: newItem.expiry_date || null,
-        supplier_name: newItem.supplier_name,
-      };
-      let { data: inserted, error: invErr } = await supabase
-        .from('inventory_items')
-        .insert([
-          {
-            ...baseInv,
-            quantity_per_plate: qtyPerPlate,
-            plate_unit: plateUnit,
-          },
-        ])
-        .select()
-        .maybeSingle();
-
-      if (invErr) {
-        const retry = await supabase
-          .from('inventory_items')
-          .insert([baseInv])
-          .select()
-          .maybeSingle();
-        inserted = retry.data;
-      }
-
-      if (inserted?.id) {
-        newItem.id = inserted.id;
-      }
-    }
-
-    setInventory((prev) => [newItem, ...prev]);
-
-    if (newItem.current_stock < newItem.minimum_stock) {
-      await addNotification({
-        title: `Low Stock Alert: ${newItem.ingredient_name}`,
-        message: `${newItem.ingredient_name} is at ${newItem.current_stock} ${newItem.unit} (minimum required: ${newItem.minimum_stock} ${newItem.unit}).`,
-        notification_type: 'low_stock',
-        recipient_role: 'mess_owner',
-      });
-    }
-
-    return newItem;
-  };
-
-  const updateInventoryPlateQuantity = async (
-    itemId,
-    quantityPerPlate,
-    plateUnit = 'g',
-    ingredientName = ''
-  ) => {
-    const qtyNum = Number(quantityPerPlate);
-    if (!qtyNum || qtyNum <= 0) return;
-
-    // Update inventory item if it exists in inventory
-    setInventory((prev) =>
-      prev.map((inv) =>
-        inv.id === itemId ||
-        (ingredientName &&
-          String(inv.ingredient_name || '').toLowerCase() ===
-            String(ingredientName).toLowerCase())
-          ? { ...inv, quantity_per_plate: qtyNum, plate_unit: plateUnit }
-          : inv
-      )
-    );
-
-    // Also update any matching dish ingredient_quantities in menus
-    if (ingredientName) {
-      const targetLower = ingredientName.trim().toLowerCase();
-      setMenus((prev) =>
-        prev.map((m) => ({
-          ...m,
-          items: (m.items || []).map((d) => {
-            const existingStructured = Array.isArray(d.ingredient_quantities)
-              ? d.ingredient_quantities
-              : [];
-            const updatedStructured = existingStructured.some(
-              (iq) => String(iq.name || '').trim().toLowerCase() === targetLower
-            )
-              ? existingStructured.map((iq) =>
-                  String(iq.name || '').trim().toLowerCase() === targetLower
-                    ? { ...iq, quantity_per_plate: qtyNum, unit: plateUnit }
-                    : iq
-                )
-              : (d.ingredients || []).some(
-                  (ing) => String(ing || '').trim().toLowerCase() === targetLower
-                )
-              ? [
-                  ...existingStructured,
-                  {
-                    name: ingredientName.trim(),
-                    quantity_per_plate: qtyNum,
-                    unit: plateUnit,
-                  },
-                ]
-              : existingStructured;
-            return { ...d, ingredient_quantities: updatedStructured };
-          }),
-        }))
-      );
-    }
-
-    if (
-      isSupabaseConfigured &&
-      supabase &&
-      !isDemoMode &&
-      itemId &&
-      !String(itemId).startsWith('menu-ing-') &&
-      !String(itemId).startsWith('inv-')
-    ) {
-      await supabase
-        .from('inventory_items')
-        .update({ quantity_per_plate: qtyNum, plate_unit: plateUnit })
-        .eq('id', itemId);
-    }
-  };
-
-  const recordInventoryTransaction = async ({
-    inventory_item_id,
-    transaction_type,
-    quantity,
-    reference_note,
-  }) => {
-    const qty = Number(quantity || 0);
-    const target = inventory.find((i) => i.id === inventory_item_id);
-    if (!target || qty <= 0) return;
-
-    const updatedStock =
-      transaction_type === 'purchase'
-        ? Number((target.current_stock + qty).toFixed(2))
-        : Math.max(0, Number((target.current_stock - qty).toFixed(2)));
-
-    setInventory((prev) =>
-      prev.map((i) =>
-        i.id === inventory_item_id ? { ...i, current_stock: updatedStock } : i
-      )
-    );
-
-    const txRecord = {
-      id: 'tx-' + Date.now(),
-      inventory_item_id,
-      ingredient_name: target.ingredient_name,
-      transaction_type,
-      quantity: qty,
-      unit: target.unit,
-      total_cost: Number((qty * target.unit_price).toFixed(2)),
-      reference_note:
-        reference_note ||
-        (transaction_type === 'purchase'
-          ? 'Stock Restock Purchase'
-          : 'Kitchen Batch Consumption'),
-      transaction_date: getTodayDateStr(),
-    };
-
-    setInventoryTransactions((prev) => [txRecord, ...prev]);
-
-    if (updatedStock < target.minimum_stock) {
-      await addNotification({
-        title: `Low Stock Alert: ${target.ingredient_name}`,
-        message: `Remaining stock is ${updatedStock} ${target.unit} (below minimum ${target.minimum_stock} ${target.unit}).`,
-        notification_type: 'low_stock',
-        recipient_role: 'mess_owner',
-      });
-    }
-
-    if (isSupabaseConfigured && supabase && !isDemoMode && user?.messId) {
-      await supabase
-        .from('inventory_items')
-        .update({ current_stock: updatedStock })
-        .eq('id', inventory_item_id);
-      await supabase.from('inventory_transactions').insert([
-        {
-          mess_id: user.messId,
-          inventory_item_id,
-          transaction_type,
-          quantity: qty,
-          unit_cost: target.unit_price,
-          total_cost: txRecord.total_cost,
-          reference_note: txRecord.reference_note,
-        },
-      ]);
-    }
-
-    return txRecord;
   };
 
   const updateMessProfile = async (updates) => {
@@ -2545,19 +2192,16 @@ export function DataProvider({ children }) {
         messStudents,
         totalRegisteredStudents,
         attendanceResponses,
+        attendanceRecords,
         mealSelectionsRows: attendanceResponses,
         historicalSelections,
         forecasts,
         dataSufficiency,
         wasteAnalytics,
-        inventoryIntelligence,
         smartRecommendations,
-        nutritionAnalytics,
         holidaysEvents,
         wasteLogs,
         weeklySeries,
-        inventory,
-        inventoryTransactions,
         feedbackList,
         notifications,
         studentSelectionsMap,
@@ -2582,9 +2226,6 @@ export function DataProvider({ children }) {
         recordActualForecastOutcome,
         addHolidayEvent,
         addFoodWasteLog,
-        addInventoryItem,
-        updateInventoryPlateQuantity,
-        recordInventoryTransaction,
         updateFeedbackStatus,
         updateMessProfile,
         regenerateMessJoinCode,

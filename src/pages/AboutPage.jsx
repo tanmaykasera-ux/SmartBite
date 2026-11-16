@@ -34,7 +34,7 @@ export default function AboutPage() {
               </Badge>
               <h1 className="text-4xl sm:text-5xl font-extrabold text-slate-900 tracking-tight leading-tight">
                 Re-Engineering Institutional Dining with{' '}
-                <span className="text-brand-800">AI &amp; Nutrition Science</span>
+                <span className="text-brand-800">Attendance Forecasting &amp; Weekly Menus</span>
               </h1>
               <p className="text-lg text-slate-600 leading-relaxed">
                 Across colleges, universities, and hostels, large quantities of prepared food are discarded every day—not because students don&apos;t care, but because institutional kitchens lack real-time demand visibility and dish-level feedback.
@@ -75,7 +75,7 @@ export default function AboutPage() {
                 </div>
                 <h2 className="text-2xl font-bold text-white">Our Mission</h2>
                 <p className="text-sm text-brand-100/90 leading-relaxed">
-                  To empower every college mess, hostel kitchen, and institutional cafeteria with predictive demand intelligence—helping reduce avoidable food waste while reinvesting savings into higher-protein, nutrient-dense meals for students.
+                  To empower every college mess, hostel kitchen, and institutional cafeteria with plate-based attendance forecasting—helping reduce avoidable food waste while reinvesting savings into better, fresher meals for students.
                 </p>
               </Card>
             </RevealOnScroll>
@@ -117,7 +117,7 @@ export default function AboutPage() {
                 Mess Owners &amp; Institutional Operators
               </h3>
               <p className="text-sm text-slate-600 leading-relaxed">
-                Mess contractors, hostel committees, and university dining departments subscribe to SmartBite to forecast meal turnout, optimize raw ingredient purchases, and reduce overproduction waste.
+                Mess contractors, hostel committees, and university dining departments subscribe to SmartBite to publish weekly menus, forecast plate turnout, and reduce overproduction waste.
               </p>
             </Card>
 
@@ -129,7 +129,7 @@ export default function AboutPage() {
                 Hostel &amp; College Students
               </h3>
               <p className="text-sm text-slate-600 leading-relaxed">
-                Students use SmartBite free of charge to inspect daily calories and macros, indicate preferred meals or dishes, and give honest taste feedback that directly improves the weekly menu.
+                Students use SmartBite free of charge to view the weekly menu, mark meals they plan to skip before the cutoff, and give honest taste feedback that directly improves the weekly menu.
               </p>
             </Card>
 
@@ -141,7 +141,7 @@ export default function AboutPage() {
                 Unconditional Meal Entitlement
               </h3>
               <p className="text-sm text-slate-600 leading-relaxed">
-                Student meal selections act as a demand signal for our planning engine. Our walk-in buffer accounts for unpolled students so nobody is ever turned away at the dining counter.
+                Student attendance polls act as a skip signal for our plate forecasting engine. Every student defaults to Attending so nobody is ever turned away at the dining counter.
               </p>
             </Card>
           </div>
@@ -165,7 +165,7 @@ export default function AboutPage() {
                     Primary Purpose
                   </td>
                   <td className="py-3.5 px-5 text-brand-900 font-semibold">
-                    AI Demand Estimation, Waste Reduction &amp; Nutrition
+                    Attendance Forecasting, Weekly Menus &amp; Waste Reduction
                   </td>
                   <td className="py-3.5 px-5 text-slate-600">
                     Manual Rule-of-Thumb Cooking
@@ -205,16 +205,16 @@ export default function AboutPage() {
                 </tr>
                 <tr>
                   <td className="py-3.5 px-5 font-semibold text-slate-900">
-                    Nutrition Intelligence
+                    Menu &amp; Feedback Visibility
                   </td>
                   <td className="py-3.5 px-5 text-brand-900 font-semibold">
-                    Complete Calorie, Protein &amp; Macro Tracking
+                    Published Monday–Sunday Weekly Menu &amp; Dish Ratings
                   </td>
                   <td className="py-3.5 px-5 text-slate-600">
-                    None (Paper Noticeboard Menu)
+                    Paper Noticeboard Menu Only
                   </td>
                   <td className="py-3.5 px-5 text-slate-500">
-                    Limited / Restaurant Marketing
+                    Commercial Restaurant Listings
                   </td>
                 </tr>
               </tbody>

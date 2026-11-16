@@ -74,7 +74,7 @@ export default function RequestDemoPage() {
               See How Much Your Mess Can Save with SmartBite AI
             </h1>
             <p className="text-sm sm:text-base text-slate-600 leading-relaxed">
-              In a 30-minute walkthrough, our institutional food specialists will show you how to forecast daily meal turnout, optimize nutrition, and onboard your students for free—while keeping 100% of their meal entitlement intact.
+              In a 30-minute walkthrough, our institutional dining specialists will show you how to forecast daily plate turnout, plan weekly menus, and onboard your students for free—while keeping 100% of their meal entitlement intact.
             </p>
 
             {/* Interactive Waste & ROI Estimator Card (Clearly Labeled Illustrative) */}
@@ -113,10 +113,10 @@ export default function RequestDemoPage() {
               <div className="grid grid-cols-2 gap-3 pt-1">
                 <div className="p-3.5 rounded-xl bg-brand-900/90 border border-brand-800">
                   <p className="text-[11px] text-brand-300">
-                    Illustrative Waste Reduction
+                    Illustrative Leftover Plates Saved
                   </p>
                   <p className="text-2xl font-extrabold text-white mt-0.5">
-                    ~{estimatedMonthlyKgSaved.toLocaleString()} kg
+                    ~{estimatedMonthlyKgSaved.toLocaleString()} plates
                   </p>
                   <p className="text-[10px] text-brand-400">
                     modeled per month across meals
@@ -130,12 +130,12 @@ export default function RequestDemoPage() {
                     ~₹{estimatedMonthlyRupeesSaved.toLocaleString('en-IN')}
                   </p>
                   <p className="text-[10px] text-brand-300">
-                    modeled per month in raw ingredients
+                    modeled per month in avoided plate waste
                   </p>
                 </div>
               </div>
               <p className="text-[10px] text-brand-300/80 italic">
-                *Illustrative mathematical projection assuming ~3.8 kg/student/month avoidable overproduction at ₹56/kg raw ingredient cost.
+                *Illustrative mathematical projection assuming ~3.8 avoidable leftover plates/student/month at ₹56/plate average kitchen cost.
               </p>
             </Card>
 
@@ -333,7 +333,7 @@ export default function RequestDemoPage() {
                       onChange={(e) =>
                         setFormState({ ...formState, message: e.target.value })
                       }
-                      placeholder="e.g., High dinner waste on Fridays and weekends, want macro tracking for students..."
+                      placeholder="e.g., High dinner waste on Fridays and weekends, want weekly menu & attendance polls for students..."
                       className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-brand-700"
                     />
                   </div>
